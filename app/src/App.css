@@ -1,0 +1,189 @@
+/* PrintBot AI Dashboard Styles */
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: hsl(var(--muted));
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted-foreground) / 0.3);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground) / 0.5);
+}
+
+/* Animations */
+@keyframes pulse-glow {
+  0%, 100% {
+    box-shadow: 0 0 5px hsl(var(--primary) / 0.5);
+  }
+  50% {
+    box-shadow: 0 0 20px hsl(var(--primary) / 0.8);
+  }
+}
+
+@keyframes slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-slide-in {
+  animation: slide-in 0.3s ease-out;
+}
+
+/* Agent status indicators */
+.agent-status-running {
+  animation: pulse-glow 2s infinite;
+}
+
+/* Card hover effects */
+.card-hover {
+  transition: all 0.2s ease;
+}
+
+.card-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px -5px rgb(0 0 0 / 0.1);
+}
+
+/* Gradient backgrounds for agent cards */
+.agent-design {
+  background: linear-gradient(135deg, #ec4899 0%, #f43f5e 100%);
+}
+
+.agent-pricing {
+  background: linear-gradient(135deg, #22c55e 0%, #10b981 100%);
+}
+
+.agent-social {
+  background: linear-gradient(135deg, #3b82f6 0%, #06b6d4 100%);
+}
+
+.agent-fulfillment {
+  background: linear-gradient(135deg, #f97316 0%, #f59e0b 100%);
+}
+
+/* Progress bar animations */
+.progress-animate {
+  transition: width 0.5s ease;
+}
+
+/* Badge styles */
+.badge-connected {
+  background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+}
+
+.badge-disconnected {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+}
+
+/* Dashboard header */
+.dashboard-header {
+  background: linear-gradient(135deg, hsl(var(--card)) 0%, hsl(var(--background)) 100%);
+  border-bottom: 1px solid hsl(var(--border));
+}
+
+/* Stats cards */
+.stat-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.stat-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 100px;
+  height: 100px;
+  background: radial-gradient(circle, hsl(var(--primary) / 0.1) 0%, transparent 70%);
+  border-radius: 50%;
+  transform: translate(30%, -30%);
+}
+
+/* Tab styles */
+.tabs-trigger {
+  position: relative;
+}
+
+.tabs-trigger[data-state="active"]::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: hsl(var(--primary));
+}
+
+/* Alert styles */
+.alert-paused {
+  border-color: hsl(var(--destructive));
+  background: hsl(var(--destructive) / 0.1);
+}
+
+/* Activity log */
+.activity-log-item {
+  transition: background-color 0.2s ease;
+}
+
+.activity-log-item:hover {
+  background-color: hsl(var(--muted));
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .stats-row {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 480px) {
+  .stats-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Dark mode adjustments */
+.dark .card-hover:hover {
+  box-shadow: 0 8px 25px -5px rgb(0 0 0 / 0.3);
+}
+
+/* Loading states */
+.loading-shimmer {
+  background: linear-gradient(
+    90deg,
+    hsl(var(--muted)) 25%,
+    hsl(var(--muted-foreground) / 0.1) 50%,
+    hsl(var(--muted)) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}

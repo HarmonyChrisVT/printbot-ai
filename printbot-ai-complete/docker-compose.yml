@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  printbot:
+    build: ./app
+    ports:
+      - "3000:3000"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - SHOPIFY_API_KEY=${SHOPIFY_API_KEY}
+      - PRINTFUL_API_KEY=${PRINTFUL_API_KEY}
+      - PRINTIFY_API_KEY=${PRINTIFY_API_KEY}
+      - GELATO_API_KEY=${GELATO_API_KEY}
+      - GOOTEN_API_KEY=${GOOTEN_API_KEY}
+      - STRIPE_API_KEY=${STRIPE_API_KEY}
+      - INSTAGRAM_API_KEY=${INSTAGRAM_API_KEY}
+      - TIKTOK_API_KEY=${TIKTOK_API_KEY}
+      - PINTEREST_API_KEY=${PINTEREST_API_KEY}
+    volumes:
+      - ./data:/app/database
+    restart: unless-stopped
+    
+  # Optional: Redis for caching
+  redis:
+    image: redis:alpine
+    ports:
+      - "6379:6379"
+    restart: unless-stopped

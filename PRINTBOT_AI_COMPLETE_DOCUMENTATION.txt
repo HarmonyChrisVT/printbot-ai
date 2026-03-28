@@ -1,0 +1,344 @@
+================================================================================
+                    PRINTBOT AI - COMPLETE DOCUMENTATION
+                      Handoff Document for AI Assistant
+================================================================================
+
+PROJECT OVERVIEW
+================================================================================
+PrintBot AI is a fully automated print-on-demand store system with 11 AI agents
+that work together to create designs, price products, post to social media,
+fulfill orders, and manage customer engagement.
+
+WHAT WAS BUILT
+================================================================================
+
+11 AI AGENTS:
+1. Design Agent - Scans trends and generates AI designs using DALL-E
+2. Pricing Agent - Dynamic pricing with competitor analysis
+3. Social Agent V2 - Posts to Instagram/TikTok/Pinterest with human emulation
+4. Fulfillment Agent - Multi-provider order fulfillment with failover
+5. B2B Agent - Corporate client management and bulk orders
+6. Content Writer Agent - SEO product descriptions and marketing copy
+7. Competitor Spy Agent - Monitors competitor stores
+8. Inventory Prediction Agent - Predicts bestsellers
+9. Customer Service Chatbot - 24/7 automated support
+10. Affiliate Agent - Referral tracking and commission management
+11. Customer Engagement Agent - Reviews, cart recovery, social proof
+
+KEY FEATURES IMPLEMENTED:
+- Multi-provider failover chain (Printful → Printify → Gelato → Gooten)
+- 3 backup social accounts per platform with auto-switch
+- Human emulation delays (20-120 seconds)
+- Plain English dashboard with status cards
+- Email capture system
+- Order tracking with auto-updates
+- Customer review requests
+- Abandoned cart recovery (1h, 24h, 72h emails)
+- Social proof injection
+- Profit analytics dashboard
+- Manual override panel
+- Cloud deployment ready (Docker)
+
+FOLDER STRUCTURE
+================================================================================
+printbot-ai-complete/
+├── START_HERE.bat              (Windows installer - needs fixing)
+├── START_HERE.sh               (Mac/Linux installer)
+├── README.txt                  (Quick start guide)
+├── docker-compose.yml          (Docker deployment config)
+├── .env.example                (API key template)
+└── app/                        (Main application)
+    ├── main.py                 (FastAPI backend entry point)
+    ├── requirements.txt        (Python dependencies)
+    ├── Dockerfile              (Container config)
+    ├── database/
+    │   └── models.py           (SQLAlchemy database models)
+    ├── python/
+    │   ├── agents/             (All 11 AI agents)
+    │   │   ├── orchestrator.py (Central coordinator)
+    │   │   ├── design_agent.py
+    │   │   ├── pricing_agent.py
+    │   │   ├── social_agent_v2.py
+    │   │   ├── fulfillment_agent.py
+    │   │   ├── b2b_agent.py
+    │   │   ├── content_writer_agent.py
+    │   │   ├── competitor_spy_agent.py
+    │   │   ├── inventory_prediction_agent.py
+    │   │   ├── customer_service_chatbot.py
+    │   │   ├── affiliate_agent.py
+    │   │   └── customer_engagement_agent.py
+    │   ├── integrations/
+    │   │   └── fulfillment_providers.py (Multi-provider chain)
+    │   └── utils/
+    │       └── logger.py
+    └── src/
+        ├── index.html          (Dashboard HTML)
+        └── app.jsx             (React dashboard)
+
+DATABASE MODELS (in database/models.py)
+================================================================================
+- StoreConfig: Store settings and API keys
+- Product: Product listings with design URLs, pricing, stats
+- Order: Order details with tracking info
+- SocialAccount: Social media account management
+- SocialPost: Posted content tracking
+- EmailSubscriber: Email list
+- AbandonedCart: Cart recovery tracking
+- B2BClient: Corporate client management
+- Competitor: Competitor store monitoring
+- Affiliate: Affiliate program members
+- ChatLog: Customer service conversations
+
+REQUIRED API KEYS (in .env file)
+================================================================================
+REQUIRED:
+- OPENAI_API_KEY (for GPT-4 and DALL-E)
+
+FULFILLMENT (at least one):
+- PRINTFUL_API_KEY
+- PRINTIFY_API_KEY
+- GELATO_API_KEY
+- GOOTEN_API_KEY
+
+E-COMMERCE PLATFORM:
+- SHOPIFY_API_KEY
+- SHOPIFY_STORE_URL
+
+PAYMENT:
+- STRIPE_API_KEY
+
+SOCIAL MEDIA (for auto-posting):
+- INSTAGRAM_API_KEY_1, _2, _3
+- TIKTOK_API_KEY_1, _2, _3
+- PINTEREST_API_KEY_1, _2, _3
+
+EMAIL:
+- SENDGRID_API_KEY
+
+PYTHON DEPENDENCIES (in requirements.txt)
+================================================================================
+Core: fastapi, uvicorn, sqlalchemy, openai, requests, python-dotenv
+Integrations: stripe, shopifyapi, beautifulsoup4, selenium
+Social: instagrapi, praw
+Testing: pytest, pytest-asyncio
+Optional: redis, celery, sentry-sdk
+
+SETUP INSTRUCTIONS
+================================================================================
+
+STEP 1: INSTALL PYTHON
+- Python 3.11 is already installed on the user's system
+- Located at: C:\Users\vermo\AppData\Local\Programs\Python\Python311
+
+STEP 2: NAVIGATE TO APP FOLDER
+The folder is at:
+C:\Users\vermo\Desktop\Kimi_Agent_Automated Store AI Agents\printbot-ai-complete\app
+
+Due to spaces in folder name, use one of these methods:
+
+Method A - Drag and drop:
+1. Open Command Prompt
+2. Type "cd " (with space)
+3. Drag the "app" folder into CMD window
+4. Press Enter
+
+Method B - Step by step:
+cd C:\Users\vermo\Desktop
+cd "Kimi_Agent_Automated Store AI Agents"
+cd printbot-ai-complete
+cd app
+
+Method C - Short path:
+cd C:\Users\vermo\Desktop\Kimi_A~1\printbot~1\app
+
+STEP 3: INSTALL DEPENDENCIES
+python -m pip install -r requirements.txt
+
+If that fails, use full path:
+C:\Users\vermo\AppData\Local\Programs\Python\Python311\python.exe -m pip install -r requirements.txt
+
+STEP 4: SETUP DATABASE
+python -c "from database.models import init_db; init_db()"
+
+STEP 5: CREATE ENV FILE
+1. Copy .env.example to .env
+2. Fill in your API keys
+
+STEP 6: START THE SERVER
+python main.py
+
+STEP 7: OPEN DASHBOARD
+Go to: http://localhost:3000
+
+KNOWN ISSUES
+================================================================================
+1. Folder path has spaces causing navigation issues
+   - Solution: Rename "Kimi_Agent_Automated Store AI Agents" to "printbot"
+
+2. START_HERE.bat had syntax errors
+   - The batch file used incorrect syntax for errorlevel checking
+   - User is manually running commands instead
+
+3. pip not in PATH
+   - Must use "python -m pip" instead of just "pip"
+
+4. Unicode errors with folder names
+   - Use drag-and-drop method or rename folders
+
+DASHBOARD FEATURES
+================================================================================
+Tabs:
+- Dashboard: System status, quick actions, agent status
+- Products: View all products, generate new ones
+- Orders: Order management with status tracking
+- Social: Social media posting (coming soon UI)
+- Analytics: Profit analytics, fulfillment stats, social metrics
+- B2B: Corporate client management (coming soon UI)
+- Settings: Store configuration
+
+API ENDPOINTS (in main.py)
+================================================================================
+GET  /api/status              - System status
+POST /api/setup               - Initial store setup
+POST /api/products/generate   - Generate new product
+GET  /api/products            - List all products
+GET  /api/orders              - List orders
+POST /api/social/post         - Create social post
+GET  /api/analytics/profit    - Get profit analytics
+POST /api/override            - Manual agent override
+GET  /api/config              - Get store config
+POST /api/config              - Update store config
+
+HUMAN EMULATION (in social_agent_v2.py)
+================================================================================
+- Min delay: 20 seconds
+- Max delay: 120 seconds
+- Typing speed: 35-65 WPM
+- Applied before posting and during typing
+
+MULTI-PROVIDER FAILOVER (in fulfillment_providers.py)
+================================================================================
+Order of providers:
+1. Printful (primary)
+2. Printify (backup 1)
+3. Gelato (backup 2)
+4. Gooten (backup 3)
+
+If one fails, automatically tries the next.
+
+SOCIAL ACCOUNT BACKUPS (in social_agent_v2.py)
+================================================================================
+Each platform has 3 accounts:
+- Primary account (index 0)
+- Backup 1 (index 1)
+- Backup 2 (index 2)
+
+If rate limited, automatically switches to next account.
+
+CART RECOVERY SCHEDULE (in customer_engagement_agent.py)
+================================================================================
+- 1 hour: "You left something behind!"
+- 24 hours: "Still thinking it over?" + 10% discount
+- 72 hours: "Last chance!" + 15% discount
+
+REVIEW REQUESTS
+================================================================================
+- Sent 7 days after delivery
+- Only sent once per order
+
+WHAT THE USER HAS DONE
+================================================================================
+- Downloaded and extracted the tar.gz file
+- Has Python 3.11 installed
+- Attempted to run START_HERE.bat (had syntax errors)
+- Attempted to navigate to folder (path issues)
+- pip not recognized (PATH issue)
+
+WHAT NEEDS TO BE DONE
+================================================================================
+1. Fix folder navigation (rename folder or use drag-drop)
+2. Install Python dependencies using "python -m pip"
+3. Setup database
+4. Create .env file with API keys
+5. Start the server
+6. Open dashboard in browser
+
+IMMEDIATE NEXT STEPS FOR USER
+================================================================================
+1. Rename "Kimi_Agent_Automated Store AI Agents" folder to "printbot"
+2. Open Command Prompt
+3. Type: cd C:\Users\vermo\Desktop\printbot\printbot-ai-complete\app
+4. Type: python -m pip install -r requirements.txt
+5. Wait for installation (5-10 minutes)
+6. Type: python -c "from database.models import init_db; init_db()"
+7. Type: python main.py
+8. Open browser to http://localhost:3000
+
+TROUBLESHOOTING
+================================================================================
+Problem: "python not recognized"
+Solution: Use full path: C:\Users\vermo\AppData\Local\Programs\Python\Python311\python.exe
+
+Problem: "pip not recognized"
+Solution: Use "python -m pip" instead of "pip"
+
+Problem: "No module named database"
+Solution: Make sure you're in the "app" folder, not a subfolder
+
+Problem: Database errors
+Solution: Delete printbot.db file and re-run init_db
+
+Problem: Port 3000 in use
+Solution: Change port in main.py or close other apps using port 3000
+
+CLOUD DEPLOYMENT
+================================================================================
+For running 24/7 without user's computer:
+
+Option 1: Docker (included)
+1. Install Docker
+2. Create .env file with API keys
+3. Run: docker-compose up -d
+
+Option 2: VPS (DigitalOcean, AWS, etc.)
+1. Rent a VPS
+2. Install Python 3.11
+3. Upload files
+4. Run: python main.py
+5. Use systemd or pm2 to keep it running
+
+Option 3: Railway/Render/Heroku
+1. Connect GitHub repo
+2. Set environment variables
+3. Deploy
+
+FILES THAT WERE CREATED
+================================================================================
+Total: 25 files
+
+Root level (5 files):
+- START_HERE.bat
+- START_HERE.sh
+- README.txt
+- docker-compose.yml
+- .env.example
+
+App folder (20 files):
+- main.py
+- requirements.txt
+- Dockerfile
+- database/models.py
+- python/agents/*.py (11 agent files)
+- python/integrations/fulfillment_providers.py
+- python/utils/logger.py
+- src/index.html
+- src/app.jsx
+
+CONTACT/QUESTIONS
+================================================================================
+This documentation was created for handoff to another AI assistant.
+The user is moving to Claude (Anthropic) for continued assistance.
+
+================================================================================
+                          END OF DOCUMENTATION
+================================================================================

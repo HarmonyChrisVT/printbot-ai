@@ -1,0 +1,80 @@
+# PrintBot AI - Docker Compose Configuration
+# ===========================================
+# Deploy to cloud (AWS, DigitalOcean, Linode, etc.)
+
+version: '3.8'
+
+services:
+  printbot:
+    build: .
+    container_name: printbot-ai
+    restart: unless-stopped
+    
+    ports:
+      - "80:80"      # Dashboard
+      - "8000:8000"  # API
+    
+    volumes:
+      # Persist data
+      - ./data:/app/data
+      - ./logs:/app/logs
+      # Environment file
+      - ./.env:/app/.env:ro
+    
+    environment:
+      - PYTHONPATH=/app
+      - DATABASE_PATH=/app/data/printbot.db
+      - LOG_LEVEL=INFO
+      - TZ=UTC
+    
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    
+    # Resource limits (adjust based on your server)
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  # Optional: Redis for caching and queues
+  redis:
+    image: redis:7-alpine
+    container_name: printbot-redis
+    restart: unless-stopped
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  # Optional: PostgreSQL for production database
+  postgres:
+    image: postgres:15-alpine
+    container_name: printbot-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: printbot
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme}
+      POSTGRES_DB: printbot
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+volumes:
+  redis-data:
+  postgres-data:
