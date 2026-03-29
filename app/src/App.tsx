@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
-import { 
-  Activity, 
-  Palette, 
-  DollarSign, 
-  Share2, 
-  Package, 
+import {
+  Activity,
+  Palette,
+  DollarSign,
+  Share2,
+  Package,
   TrendingUp,
   AlertCircle,
   CheckCircle,
@@ -13,7 +13,14 @@ import {
   Settings,
   Database,
   Shield,
-  Zap
+  Zap,
+  Briefcase,
+  FileText,
+  Eye,
+  BarChart2,
+  MessageSquare,
+  Users,
+  Heart
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -30,7 +37,7 @@ interface AgentStatus {
   name: string;
   running: boolean;
   lastActivity: string;
-  stats: Record<string, number>;
+  stats: Record<string, number | string>;
 }
 
 interface SystemStatus {
@@ -86,6 +93,48 @@ const mockSystemStatus: SystemStatus = {
       running: true,
       lastActivity: '30 seconds ago',
       stats: { ordersToday: 5, pendingOrders: 2, shippedToday: 3 }
+    },
+    b2b: {
+      name: 'B2B Agent',
+      running: true,
+      lastActivity: '45 minutes ago',
+      stats: { leadsContacted: 8, dealsActive: 3, quotesSent: 5 }
+    },
+    content_writer: {
+      name: 'Content Writer Agent',
+      running: true,
+      lastActivity: '20 minutes ago',
+      stats: { descriptionsWritten: 14, abTestsActive: 3 }
+    },
+    competitor_spy: {
+      name: 'Competitor Spy Agent',
+      running: true,
+      lastActivity: '2 hours ago',
+      stats: { competitorsTracked: 5, priceChanges: 7, alertsTriggered: 2 }
+    },
+    inventory_prediction: {
+      name: 'Inventory Prediction Agent',
+      running: true,
+      lastActivity: '3 hours ago',
+      stats: { productsAnalyzed: 32, restockAlerts: 4, forecastAccuracy: 87 }
+    },
+    customer_service: {
+      name: 'Customer Service Chatbot',
+      running: true,
+      lastActivity: '5 minutes ago',
+      stats: { ticketsHandled: 11, avgResponseTime: 42, satisfactionRate: 94 }
+    },
+    affiliate: {
+      name: 'Affiliate Agent',
+      running: true,
+      lastActivity: '1 hour ago',
+      stats: { affiliatesActive: 12, clicksToday: 340, commissionsEarned: 28 }
+    },
+    customer_engagement: {
+      name: 'Customer Engagement Agent',
+      running: true,
+      lastActivity: '10 minutes ago',
+      stats: { emailsSent: 45, openRate: 38, campaignsActive: 2 }
     }
   },
   config: {
@@ -228,6 +277,136 @@ function DeadMansSwitch({ status }: { status: SystemStatus['deadMansSwitch'] }) 
   );
 }
 
+// Agent definitions: icon, color, description, detail rows
+const agentConfig: Record<string, {
+  icon: any;
+  color: string;
+  description: string;
+  details: { label: string; value: string }[];
+}> = {
+  design: {
+    icon: Palette,
+    color: 'bg-gradient-to-br from-pink-500 to-rose-500',
+    description: 'Scans trends and generates AI designs every 30 minutes',
+    details: [
+      { label: 'Daily Limit', value: '2 / 3 designs' },
+      { label: 'Trend Sources', value: '4 active' },
+      { label: 'Auto-Approve', value: 'Off' },
+      { label: 'Next Scan', value: '18 minutes' },
+    ],
+  },
+  pricing: {
+    icon: DollarSign,
+    color: 'bg-gradient-to-br from-green-500 to-emerald-500',
+    description: 'Monitors competitors and adjusts prices every 2 hours',
+    details: [
+      { label: 'Anchor Margin', value: '40%' },
+      { label: 'Floor Margin', value: '25%' },
+      { label: 'Competitors', value: '5 tracked' },
+      { label: 'Charm Pricing', value: 'Enabled' },
+    ],
+  },
+  social: {
+    icon: Share2,
+    color: 'bg-gradient-to-br from-blue-500 to-cyan-500',
+    description: 'Manages Instagram & TikTok presence every 6 hours',
+    details: [
+      { label: 'Daily Actions', value: '45 / 100' },
+      { label: 'Instagram Accounts', value: '3 configured' },
+      { label: 'TikTok Accounts', value: '3 configured' },
+      { label: 'Auto-Like', value: 'Enabled' },
+    ],
+  },
+  fulfillment: {
+    icon: Package,
+    color: 'bg-gradient-to-br from-orange-500 to-amber-500',
+    description: 'Processes orders via Printful every 5 minutes',
+    details: [
+      { label: 'Pending Orders', value: '2 orders' },
+      { label: 'Provider', value: 'Printful' },
+      { label: 'Backup', value: 'Printify' },
+      { label: 'Auto-Tracking', value: 'Enabled' },
+    ],
+  },
+  b2b: {
+    icon: Briefcase,
+    color: 'bg-gradient-to-br from-violet-500 to-purple-500',
+    description: 'Identifies and contacts wholesale & bulk order leads',
+    details: [
+      { label: 'Leads Contacted', value: '8 today' },
+      { label: 'Active Deals', value: '3 in progress' },
+      { label: 'Min Order Qty', value: '10 units' },
+      { label: 'Wholesale Discount', value: '20%' },
+    ],
+  },
+  content_writer: {
+    icon: FileText,
+    color: 'bg-gradient-to-br from-teal-500 to-green-500',
+    description: 'Generates SEO-optimized product titles and descriptions',
+    details: [
+      { label: 'Descriptions Written', value: '14 today' },
+      { label: 'A/B Tests Active', value: '3 running' },
+      { label: 'SEO Optimizer', value: 'Enabled' },
+      { label: 'Model', value: 'GPT-4' },
+    ],
+  },
+  competitor_spy: {
+    icon: Eye,
+    color: 'bg-gradient-to-br from-slate-500 to-gray-600',
+    description: 'Tracks competitor pricing and product launches',
+    details: [
+      { label: 'Competitors Tracked', value: '5 stores' },
+      { label: 'Price Changes', value: '7 today' },
+      { label: 'Alerts Triggered', value: '2 today' },
+      { label: 'Scan Interval', value: 'Every 2 hours' },
+    ],
+  },
+  inventory_prediction: {
+    icon: BarChart2,
+    color: 'bg-gradient-to-br from-indigo-500 to-blue-600',
+    description: 'Predicts stock needs and triggers restock alerts',
+    details: [
+      { label: 'Products Analyzed', value: '32 SKUs' },
+      { label: 'Restock Alerts', value: '4 active' },
+      { label: 'Forecast Accuracy', value: '87%' },
+      { label: 'Lookback Window', value: '90 days' },
+    ],
+  },
+  customer_service: {
+    icon: MessageSquare,
+    color: 'bg-gradient-to-br from-sky-500 to-blue-500',
+    description: 'Handles customer inquiries and support tickets automatically',
+    details: [
+      { label: 'Tickets Handled', value: '11 today' },
+      { label: 'Avg Response Time', value: '42 seconds' },
+      { label: 'Satisfaction Rate', value: '94%' },
+      { label: 'Escalations', value: '1 today' },
+    ],
+  },
+  affiliate: {
+    icon: Users,
+    color: 'bg-gradient-to-br from-rose-500 to-pink-600',
+    description: 'Manages affiliate partners and tracks commissions',
+    details: [
+      { label: 'Active Affiliates', value: '12 partners' },
+      { label: 'Clicks Today', value: '340' },
+      { label: 'Commissions Earned', value: '$28 today' },
+      { label: 'Commission Rate', value: '10%' },
+    ],
+  },
+  customer_engagement: {
+    icon: Heart,
+    color: 'bg-gradient-to-br from-fuchsia-500 to-pink-500',
+    description: 'Runs email campaigns and re-engagement sequences',
+    details: [
+      { label: 'Emails Sent', value: '45 today' },
+      { label: 'Open Rate', value: '38%' },
+      { label: 'Active Campaigns', value: '2 running' },
+      { label: 'Unsubscribe Rate', value: '0.4%' },
+    ],
+  },
+};
+
 function App() {
   const [status] = useState<SystemStatus>(mockSystemStatus);
   const [analytics] = useState<Analytics>(mockAnalytics);
@@ -239,6 +418,8 @@ function App() {
     }, 5000);
     return () => clearInterval(interval);
   }, []);
+
+  const agentKeys = Object.keys(agentConfig);
 
   return (
     <div className="min-h-screen bg-background">
@@ -283,52 +464,45 @@ function App() {
           <TabsContent value="dashboard" className="space-y-6">
             {/* Stats Row */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              <StatCard 
-                title="Today's Revenue" 
+              <StatCard
+                title="Today's Revenue"
                 value={`$${analytics.today.revenue.toFixed(2)}`}
                 change="+12% from yesterday"
                 icon={DollarSign}
               />
-              <StatCard 
-                title="Today's Orders" 
+              <StatCard
+                title="Today's Orders"
                 value={analytics.today.orders.toString()}
                 change="+3 new today"
                 icon={Package}
               />
-              <StatCard 
-                title="Today's Profit" 
+              <StatCard
+                title="Today's Profit"
                 value={`$${analytics.today.profit.toFixed(2)}`}
                 icon={TrendingUp}
               />
-              <StatCard 
-                title="Active Agents" 
+              <StatCard
+                title="Active Agents"
                 value={Object.values(status.agents).filter(a => a.running).length.toString()}
                 icon={Activity}
               />
             </div>
 
-            {/* Agents Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <AgentCard 
-                agent={status.agents.design} 
-                icon={Palette} 
-                color="bg-gradient-to-br from-pink-500 to-rose-500"
-              />
-              <AgentCard 
-                agent={status.agents.pricing} 
-                icon={DollarSign} 
-                color="bg-gradient-to-br from-green-500 to-emerald-500"
-              />
-              <AgentCard 
-                agent={status.agents.social} 
-                icon={Share2} 
-                color="bg-gradient-to-br from-blue-500 to-cyan-500"
-              />
-              <AgentCard 
-                agent={status.agents.fulfillment} 
-                icon={Package} 
-                color="bg-gradient-to-br from-orange-500 to-amber-500"
-              />
+            {/* Agents Grid — all 11 */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {agentKeys.map((key) => {
+                const agent = status.agents[key];
+                const cfg = agentConfig[key];
+                if (!agent || !cfg) return null;
+                return (
+                  <AgentCard
+                    key={key}
+                    agent={agent}
+                    icon={cfg.icon}
+                    color={cfg.color}
+                  />
+                );
+              })}
             </div>
 
             {/* Dead Man's Switch */}
@@ -338,168 +512,40 @@ function App() {
           {/* Agents Tab */}
           <TabsContent value="agents" className="space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Design Agent Details */}
-              <Card>
-                <CardHeader>
-                  <div className="flex items-center gap-3">
-                    <Palette className="w-5 h-5 text-pink-500" />
-                    <CardTitle>Design Agent</CardTitle>
-                  </div>
-                  <CardDescription>
-                    Scans trends and generates AI designs every 30 minutes
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Daily Limit</span>
-                      <span>2 / 3 designs</span>
-                    </div>
-                    <Progress value={66} className="h-2" />
-                  </div>
-                  <Separator />
-                  <div className="grid grid-cols-2 gap-4 text-sm">
-                    <div>
-                      <p className="text-muted-foreground">Trend Sources</p>
-                      <p className="font-medium">4 active</p>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground">Auto-Approve</p>
-                      <p className="font-medium">Off</p>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground">Next Scan</p>
-                      <p className="font-medium">18 minutes</p>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground">Pending Review</p>
-                      <p className="font-medium">1 design</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Pricing Agent Details */}
-              <Card>
-                <CardHeader>
-                  <div className="flex items-center gap-3">
-                    <DollarSign className="w-5 h-5 text-green-500" />
-                    <CardTitle>Pricing Agent</CardTitle>
-                  </div>
-                  <CardDescription>
-                    Monitors competitors and adjusts prices every 2 hours
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Anchor Margin</span>
-                      <span>40%</span>
-                    </div>
-                    <Progress value={40} className="h-2" />
-                  </div>
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Floor Margin</span>
-                      <span>25%</span>
-                    </div>
-                    <Progress value={25} className="h-2" />
-                  </div>
-                  <Separator />
-                  <div className="grid grid-cols-2 gap-4 text-sm">
-                    <div>
-                      <p className="text-muted-foreground">Competitors</p>
-                      <p className="font-medium">5 tracked</p>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground">Charm Pricing</p>
-                      <p className="font-medium">Enabled</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Social Agent Details */}
-              <Card>
-                <CardHeader>
-                  <div className="flex items-center gap-3">
-                    <Share2 className="w-5 h-5 text-blue-500" />
-                    <CardTitle>Social Agent</CardTitle>
-                  </div>
-                  <CardDescription>
-                    Manages Instagram & TikTok presence every 6 hours
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Daily Actions</span>
-                      <span>45 / 100</span>
-                    </div>
-                    <Progress value={45} className="h-2" />
-                  </div>
-                  <Separator />
-                  <div className="grid grid-cols-2 gap-4 text-sm">
-                    <div>
-                      <p className="text-muted-foreground">Instagram Accounts</p>
-                      <p className="font-medium">3 configured</p>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground">TikTok Accounts</p>
-                      <p className="font-medium">3 configured</p>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground">Auto-Like</p>
-                      <p className="font-medium">Enabled</p>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground">Auto-Comment</p>
-                      <p className="font-medium">Enabled</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Fulfillment Agent Details */}
-              <Card>
-                <CardHeader>
-                  <div className="flex items-center gap-3">
-                    <Package className="w-5 h-5 text-orange-500" />
-                    <CardTitle>Fulfillment Agent</CardTitle>
-                  </div>
-                  <CardDescription>
-                    Processes orders via Printful every 5 minutes
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Pending Orders</span>
-                      <span>2 orders</span>
-                    </div>
-                    <Progress value={20} className="h-2" />
-                  </div>
-                  <Separator />
-                  <div className="grid grid-cols-2 gap-4 text-sm">
-                    <div>
-                      <p className="text-muted-foreground">Provider</p>
-                      <p className="font-medium">Printful</p>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground">Backup</p>
-                      <p className="font-medium">Printify</p>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground">Auto-Tracking</p>
-                      <p className="font-medium">Enabled</p>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground">Next Poll</p>
-                      <p className="font-medium">4 minutes</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+              {agentKeys.map((key) => {
+                const agent = status.agents[key];
+                const cfg = agentConfig[key];
+                if (!agent || !cfg) return null;
+                const Icon = cfg.icon;
+                return (
+                  <Card key={key}>
+                    <CardHeader>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className={`p-2 rounded-lg ${cfg.color}`}>
+                            <Icon className="w-4 h-4 text-white" />
+                          </div>
+                          <CardTitle className="text-base">{agent.name}</CardTitle>
+                        </div>
+                        <Badge variant={agent.running ? "default" : "secondary"}>
+                          {agent.running ? 'Running' : 'Stopped'}
+                        </Badge>
+                      </div>
+                      <CardDescription>{cfg.description}</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="grid grid-cols-2 gap-3 text-sm">
+                        {cfg.details.map((d) => (
+                          <div key={d.label}>
+                            <p className="text-muted-foreground">{d.label}</p>
+                            <p className="font-medium">{d.value}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
             </div>
           </TabsContent>
 
@@ -582,16 +628,21 @@ function App() {
                   <div className="space-y-2">
                     {[
                       { time: '2 min ago', agent: 'Design', action: 'Generated design: "Monday Motivation"', status: 'success' },
+                      { time: '5 min ago', agent: 'Customer Service', action: 'Resolved ticket #482: shipping inquiry', status: 'success' },
                       { time: '5 min ago', agent: 'Fulfillment', action: 'Order #1024 shipped', status: 'success' },
+                      { time: '10 min ago', agent: 'Engagement', action: 'Sent re-engagement campaign to 45 customers', status: 'success' },
                       { time: '15 min ago', agent: 'Pricing', action: 'Updated 12 product prices', status: 'success' },
+                      { time: '20 min ago', agent: 'Content Writer', action: 'Wrote descriptions for 14 products', status: 'success' },
+                      { time: '45 min ago', agent: 'B2B', action: 'Contacted 8 wholesale leads', status: 'success' },
                       { time: '1 hour ago', agent: 'Social', action: 'Posted to Instagram @printbot_main', status: 'success' },
-                      { time: '2 hours ago', agent: 'Design', action: 'Trend scan completed', status: 'success' },
-                      { time: '3 hours ago', agent: 'Fulfillment', action: 'Order #1023 sent to Printful', status: 'success' },
+                      { time: '1 hour ago', agent: 'Affiliate', action: '340 affiliate clicks tracked', status: 'success' },
+                      { time: '2 hours ago', agent: 'Competitor Spy', action: '7 competitor price changes detected', status: 'success' },
+                      { time: '3 hours ago', agent: 'Inventory', action: '4 restock alerts triggered', status: 'success' },
                     ].map((log, i) => (
                       <div key={i} className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted">
                         <div className={`w-2 h-2 rounded-full ${log.status === 'success' ? 'bg-green-500' : 'bg-red-500'}`} />
-                        <span className="text-xs text-muted-foreground w-20">{log.time}</span>
-                        <Badge variant="outline" className="text-xs">{log.agent}</Badge>
+                        <span className="text-xs text-muted-foreground w-20 shrink-0">{log.time}</span>
+                        <Badge variant="outline" className="text-xs shrink-0">{log.agent}</Badge>
                         <span className="text-sm">{log.action}</span>
                       </div>
                     ))}
