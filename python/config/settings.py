@@ -232,6 +232,9 @@ def load_config_from_env():
     config.fulfillment.smtp_password = os.getenv("SMTP_PASSWORD", "")
     config.fulfillment.notification_email = os.getenv("NOTIFICATION_EMAIL", "")
     
+    # Database
+    config.database_path = os.getenv("DATABASE_PATH", config.database_path)
+
     # System
     config.system.emergency_contact = os.getenv("EMERGENCY_CONTACT", "")
     config.system.backup_cloud_token = os.getenv("BACKUP_CLOUD_TOKEN", "")

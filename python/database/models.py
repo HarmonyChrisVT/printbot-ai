@@ -311,6 +311,8 @@ class AnalyticsDaily(Base):
 # Database initialization
 def init_database(db_path: str):
     """Initialize the database with all tables"""
+    import os
+    os.makedirs(os.path.dirname(os.path.abspath(db_path)), exist_ok=True)
     engine = create_engine(f'sqlite:///{db_path}')
     Base.metadata.create_all(engine)
     return engine
