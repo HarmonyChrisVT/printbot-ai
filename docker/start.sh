@@ -4,7 +4,14 @@
 
 set -e
 
-echo "Starting PrintBot AI..."
+# Railway injects PORT; default to 8080 for local/other environments
+export PORT="${PORT:-8080}"
+
+echo "Starting PrintBot AI on port ${PORT}..."
+
+# Generate nginx config from template with actual PORT value
+# Only substitute ${PORT} - leave nginx variables like $uri, $host untouched
+envsubst '${PORT}' < /etc/nginx/conf.d/default.conf.template > /etc/nginx/conf.d/default.conf
 
 # Start Python backend first so it's ready before nginx
 echo "Starting AI agents and API server..."
@@ -26,7 +33,7 @@ echo "Starting web server..."
 nginx -g "daemon off;" &
 
 echo "PrintBot AI is running!"
-echo "   Dashboard: http://localhost"
+echo "   Dashboard: http://localhost:${PORT}"
 echo "   API: http://localhost:8000"
 
 # Wait for all background processes
