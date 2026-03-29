@@ -237,6 +237,24 @@ function DeadMansSwitch({ status }: { status: SystemStatus['deadMansSwitch'] }) 
   const hours = Math.floor(status.timeUntilPause / 3600);
   const minutes = Math.floor((status.timeUntilPause % 3600) / 60);
   const progress = ((24 * 3600 - status.timeUntilPause) / (24 * 3600)) * 100;
+  const [checkinState, setCheckinState] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+
+  async function handleCheckin() {
+    setCheckinState('loading');
+    try {
+      const res = await fetch('/api/checkin', { method: 'POST' });
+      if (res.ok) {
+        setCheckinState('success');
+        setTimeout(() => setCheckinState('idle'), 3000);
+      } else {
+        setCheckinState('error');
+        setTimeout(() => setCheckinState('idle'), 3000);
+      }
+    } catch {
+      setCheckinState('error');
+      setTimeout(() => setCheckinState('idle'), 3000);
+    }
+  }
 
   return (
     <Card className={status.isPaused ? 'border-red-500' : ''}>
@@ -266,12 +284,29 @@ function DeadMansSwitch({ status }: { status: SystemStatus['deadMansSwitch'] }) 
               </div>
               <Progress value={progress} className="h-2" />
             </div>
-            <Button className="w-full" variant="outline">
-              <CheckCircle className="w-4 h-4 mr-2" />
-              Check In Now
-            </Button>
           </>
         )}
+        {checkinState === 'success' && (
+          <Alert className="border-green-500 text-green-700">
+            <CheckCircle className="w-4 h-4" />
+            <AlertDescription>Check-in recorded successfully.</AlertDescription>
+          </Alert>
+        )}
+        {checkinState === 'error' && (
+          <Alert variant="destructive">
+            <AlertCircle className="w-4 h-4" />
+            <AlertDescription>Check-in failed. Is the backend running?</AlertDescription>
+          </Alert>
+        )}
+        <Button
+          className="w-full"
+          variant={checkinState === 'success' ? 'default' : 'outline'}
+          disabled={checkinState === 'loading'}
+          onClick={handleCheckin}
+        >
+          <CheckCircle className="w-4 h-4 mr-2" />
+          {checkinState === 'loading' ? 'Checking in…' : checkinState === 'success' ? 'Checked In!' : 'Check In Now'}
+        </Button>
       </CardContent>
     </Card>
   );
