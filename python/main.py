@@ -390,6 +390,90 @@ async def get_analytics():
     }
 
 
+@app.get("/api/health")
+async def health_check():
+    """Test all API connections and return their status"""
+    import aiohttp
+    import time
+
+    results = {}
+
+    # --- Shopify ---
+    if not config.shopify.is_configured:
+        results["shopify"] = {"ok": False, "error": "not configured"}
+    else:
+        t = time.monotonic()
+        try:
+            url = f"https://{config.shopify.shop_url}/admin/api/{config.shopify.api_version}/shop.json"
+            headers = {"X-Shopify-Access-Token": config.shopify.access_token}
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                    latency = round((time.monotonic() - t) * 1000)
+                    if resp.status == 200:
+                        data = await resp.json()
+                        results["shopify"] = {
+                            "ok": True,
+                            "shop": data.get("shop", {}).get("name"),
+                            "plan": data.get("shop", {}).get("plan_name"),
+                            "latency_ms": latency,
+                        }
+                    else:
+                        results["shopify"] = {"ok": False, "status": resp.status, "latency_ms": latency}
+        except Exception as e:
+            results["shopify"] = {"ok": False, "error": str(e)}
+
+    # --- Printful ---
+    if not config.printful.is_configured:
+        results["printful"] = {"ok": False, "error": "not configured"}
+    else:
+        t = time.monotonic()
+        try:
+            url = f"{config.printful.api_base}/store"
+            headers = {"Authorization": f"Bearer {config.printful.api_key}"}
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                    latency = round((time.monotonic() - t) * 1000)
+                    if resp.status == 200:
+                        data = await resp.json()
+                        store = data.get("result", {})
+                        results["printful"] = {
+                            "ok": True,
+                            "store": store.get("name"),
+                            "currency": store.get("currency"),
+                            "latency_ms": latency,
+                        }
+                    else:
+                        results["printful"] = {"ok": False, "status": resp.status, "latency_ms": latency}
+        except Exception as e:
+            results["printful"] = {"ok": False, "error": str(e)}
+
+    # --- OpenAI ---
+    if not config.openai.is_configured:
+        results["openai"] = {"ok": False, "error": "not configured"}
+    else:
+        t = time.monotonic()
+        try:
+            import openai as _openai
+            client = _openai.AsyncOpenAI(api_key=config.openai.api_key)
+            models = await client.models.list()
+            latency = round((time.monotonic() - t) * 1000)
+            model_ids = [m.id for m in models.data[:5]]
+            results["openai"] = {
+                "ok": True,
+                "models_available": len(models.data),
+                "sample_models": model_ids,
+                "latency_ms": latency,
+            }
+        except Exception as e:
+            results["openai"] = {"ok": False, "error": str(e)}
+
+    all_ok = all(v["ok"] for v in results.values())
+    return {
+        "healthy": all_ok,
+        "services": results,
+    }
+
+
 def main():
     """Main entry point"""
     orchestrator = PrintBotOrchestrator()
