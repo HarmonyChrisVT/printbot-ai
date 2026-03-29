@@ -1,7 +1,7 @@
 """
 PrintBot AI - Main Orchestrator
 ================================
-Coordinates all 4 AI agents and manages the system
+Coordinates all 11 AI agents and manages the system
 """
 import asyncio
 import signal
@@ -15,8 +15,15 @@ from config.settings import config, load_config_from_env
 from database.models import init_database, get_session, SystemEvent
 from agents.design_agent import DesignAgent
 from agents.pricing_agent import PricingAgent
-from agents.social_agent import SocialAgent
+from agents.social_agent_v2 import SocialAgentV2
 from agents.fulfillment_agent import FulfillmentAgent
+from agents.affiliate_agent import AffiliateAgent
+from agents.b2b_agent import B2BAgent
+from agents.competitor_spy_agent import CompetitorSpyAgent
+from agents.content_writer_agent import ContentWriterAgent
+from agents.customer_engagement_agent import CustomerEngagementAgent
+from agents.customer_service_chatbot import CustomerServiceChatbot
+from agents.inventory_prediction_agent import InventoryPredictionAgent
 
 
 class DeadMansSwitch:
@@ -138,8 +145,15 @@ class PrintBotOrchestrator:
         # Initialize agents
         self.design_agent = DesignAgent(self.session)
         self.pricing_agent = PricingAgent(self.session)
-        self.social_agent = SocialAgent(self.session)
+        self.social_agent = SocialAgentV2(self.session)
         self.fulfillment_agent = FulfillmentAgent(self.session)
+        self.affiliate_agent = AffiliateAgent(self.session)
+        self.b2b_agent = B2BAgent(self.session)
+        self.competitor_spy_agent = CompetitorSpyAgent(self.session)
+        self.content_writer_agent = ContentWriterAgent(self.session)
+        self.customer_engagement_agent = CustomerEngagementAgent(self.session)
+        self.customer_service_chatbot = CustomerServiceChatbot(self.session)
+        self.inventory_prediction_agent = InventoryPredictionAgent(self.session)
         
         # Initialize systems
         self.dead_mans_switch = DeadMansSwitch(
@@ -175,6 +189,12 @@ class PrintBotOrchestrator:
             asyncio.create_task(self.pricing_agent.run()),
             asyncio.create_task(self.social_agent.run()),
             asyncio.create_task(self.fulfillment_agent.run()),
+            asyncio.create_task(self.affiliate_agent.run()),
+            asyncio.create_task(self.b2b_agent.run()),
+            asyncio.create_task(self.competitor_spy_agent.run()),
+            asyncio.create_task(self.customer_engagement_agent.run()),
+            asyncio.create_task(self.customer_service_chatbot.run()),
+            asyncio.create_task(self.inventory_prediction_agent.run()),
             asyncio.create_task(self._monitoring_loop()),
         ]
         
@@ -204,6 +224,12 @@ class PrintBotOrchestrator:
         self.pricing_agent.stop()
         self.social_agent.stop()
         self.fulfillment_agent.stop()
+        self.affiliate_agent.stop()
+        self.b2b_agent.stop()
+        self.competitor_spy_agent.stop()
+        self.customer_engagement_agent.stop()
+        self.customer_service_chatbot.stop()
+        self.inventory_prediction_agent.stop()
         
         # Cancel tasks
         for task in self.agent_tasks:
@@ -270,7 +296,14 @@ class PrintBotOrchestrator:
                 'design': {'running': self.design_agent.running},
                 'pricing': {'running': self.pricing_agent.running},
                 'social': {'running': self.social_agent.running},
-                'fulfillment': {'running': self.fulfillment_agent.running}
+                'fulfillment': {'running': self.fulfillment_agent.running},
+                'affiliate': {'running': self.affiliate_agent.running},
+                'b2b': {'running': self.b2b_agent.running},
+                'competitor_spy': {'running': self.competitor_spy_agent.running},
+                'content_writer': {'running': False},
+                'customer_engagement': {'running': self.customer_engagement_agent.running},
+                'customer_service': {'running': self.customer_service_chatbot.running},
+                'inventory_prediction': {'running': self.inventory_prediction_agent.running},
             },
             'config': {
                 'shopify': config.shopify.is_configured,
