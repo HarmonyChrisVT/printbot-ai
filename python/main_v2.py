@@ -9,6 +9,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 import json
+from typing import Dict, List
 
 from config.settings import config, load_config_from_env
 from database.models import init_database, get_session, SystemEvent
