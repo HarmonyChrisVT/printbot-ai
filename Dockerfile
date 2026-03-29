@@ -19,7 +19,7 @@ RUN chmod +x ./start.sh
 
 RUN mkdir -p /app/data /app/logs
 
-ENV PYTHONPATH=/app
+ENV PYTHONPATH=/app/python:/app
 ENV DATABASE_PATH=/app/data/printbot.db
 ENV LOG_LEVEL=INFO
 
