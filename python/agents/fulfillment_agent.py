@@ -13,8 +13,8 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
-from ..config.settings import config
-from ..database.models import Order, OrderItem, Product, Sale, AgentLog, get_session
+from config.settings import config
+from database.models import Order, OrderItem, Product, Sale, AgentLog, get_session
 
 
 class PrintfulAPI:
@@ -283,7 +283,7 @@ class FulfillmentAgent:
     async def _poll_new_orders(self):
         """Poll Shopify for new orders"""
         try:
-            from ..integrations.shopify import ShopifyAPI
+            from integrations.shopify import ShopifyAPI
             shopify = ShopifyAPI()
             
             # Get orders created since last check
@@ -448,7 +448,7 @@ class FulfillmentAgent:
             today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
             
             # Get or create today's analytics
-            from ..database.models import AnalyticsDaily
+            from database.models import AnalyticsDaily
             analytics = self.session.query(AnalyticsDaily).filter_by(date=today).first()
             
             if not analytics:
@@ -505,7 +505,7 @@ class FulfillmentAgent:
 # Standalone run function
 async def run_fulfillment_agent():
     """Run fulfillment agent standalone"""
-    from ..database.models import init_database
+    from database.models import init_database
     
     engine = init_database(config.database_path)
     session = get_session(engine)

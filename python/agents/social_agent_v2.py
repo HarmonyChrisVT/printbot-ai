@@ -13,8 +13,8 @@ from typing import List, Dict, Optional, Tuple
 import json
 from dataclasses import dataclass
 
-from ..config.settings import config
-from ..database.models import SocialPost, Product, AgentLog, get_session
+from config.settings import config
+from database.models import SocialPost, Product, AgentLog, get_session
 
 
 @dataclass
@@ -456,8 +456,8 @@ class SocialAgentV2:
 # Standalone run
 async def run_social_agent_v2():
     """Run social agent v2 standalone"""
-    from ..database.models import init_database
-    from ..config.settings import config
+    from database.models import init_database
+    from config.settings import config
     
     engine = init_database(config.database_path)
     session = get_session(engine)

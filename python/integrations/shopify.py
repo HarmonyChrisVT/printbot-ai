@@ -7,7 +7,7 @@ import aiohttp
 from typing import List, Dict, Optional
 from datetime import datetime
 
-from ..config.settings import config
+from config.settings import config
 
 
 class ShopifyAPI:
@@ -247,7 +247,7 @@ class ShopifyProductSync:
     
     async def sync_all_products(self):
         """Sync all products to Shopify"""
-        from ..database.models import Product
+        from database.models import Product
         
         products = self.session.query(Product).filter(
             Product.is_active == True

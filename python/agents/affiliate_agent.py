@@ -13,8 +13,8 @@ import secrets
 import hashlib
 import json
 
-from ..config.settings import config
-from ..database.models import Order, Sale, AgentLog, get_session
+from config.settings import config
+from database.models import Order, Sale, AgentLog, get_session
 
 
 @dataclass
@@ -69,7 +69,7 @@ class AffiliateManager:
         payout_method: str = 'paypal'
     ) -> Affiliate:
         """Create new affiliate"""
-        from ..database.models import Affiliate as AffiliateModel
+        from database.models import Affiliate as AffiliateModel
         
         referral_code = self.generate_referral_code(name)
         
@@ -99,7 +99,7 @@ class AffiliateManager:
     
     async def track_referral(self, referral_code: str, order_id: int) -> bool:
         """Track a referral from order"""
-        from ..database.models import Affiliate as AffiliateModel, Referral as ReferralModel
+        from database.models import Affiliate as AffiliateModel, Referral as ReferralModel
         
         # Find affiliate
         affiliate = self.session.query(AffiliateModel).filter_by(
@@ -143,7 +143,7 @@ class AffiliateManager:
     
     async def approve_referrals(self, days_old: int = 30):
         """Approve referrals after return period"""
-        from ..database.models import Referral as ReferralModel
+        from database.models import Referral as ReferralModel
         
         cutoff = datetime.utcnow() - timedelta(days=days_old)
         
@@ -162,7 +162,7 @@ class AffiliateManager:
     
     async def process_payouts(self, min_payout: float = 50.0):
         """Process affiliate payouts"""
-        from ..database.models import Affiliate as AffiliateModel
+        from database.models import Affiliate as AffiliateModel
         
         affiliates = self.session.query(AffiliateModel).filter(
             AffiliateModel.balance >= min_payout,
@@ -180,7 +180,7 @@ class AffiliateManager:
                 affiliate.total_paid += payout_amount
                 
                 # Mark referrals as paid
-                from ..database.models import Referral as ReferralModel
+                from database.models import Referral as ReferralModel
                 referrals = self.session.query(ReferralModel).filter(
                     ReferralModel.affiliate_id == affiliate.id,
                     ReferralModel.status == 'approved'
@@ -215,7 +215,7 @@ Track your earnings: [Dashboard Link]
     
     def get_affiliate_stats(self, affiliate_id: int) -> Dict:
         """Get stats for an affiliate"""
-        from ..database.models import Affiliate as AffiliateModel, Referral as ReferralModel
+        from database.models import Affiliate as AffiliateModel, Referral as ReferralModel
         
         affiliate = self.session.query(AffiliateModel).get(affiliate_id)
         if not affiliate:
@@ -276,7 +276,7 @@ class AffiliateAgent:
     
     async def _generate_weekly_report(self):
         """Generate weekly affiliate report"""
-        from ..database.models import Affiliate as AffiliateModel
+        from database.models import Affiliate as AffiliateModel
         
         affiliates = self.session.query(AffiliateModel).filter_by(is_active=True).all()
         
@@ -322,8 +322,8 @@ class AffiliateAgent:
 # Standalone run
 async def run_affiliate_agent():
     """Run affiliate agent standalone"""
-    from ..database.models import init_database
-    from ..config.settings import config
+    from database.models import init_database
+    from config.settings import config
     
     engine = init_database(config.database_path)
     session = get_session(engine)

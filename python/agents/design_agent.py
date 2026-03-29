@@ -16,8 +16,8 @@ import os
 import re
 from pathlib import Path
 
-from ..config.settings import config
-from ..database.models import Design, Product, TrendData, AgentLog, get_session
+from config.settings import config
+from database.models import Design, Product, TrendData, AgentLog, get_session
 
 
 class TrendScanner:
@@ -400,7 +400,7 @@ class DesignAgent:
 # Standalone run function
 async def run_design_agent():
     """Run design agent standalone"""
-    from ..database.models import init_database
+    from database.models import init_database
     
     engine = init_database(config.database_path)
     session = get_session(engine)

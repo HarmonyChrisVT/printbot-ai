@@ -9,8 +9,8 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 import json
 
-from ..config.settings import config
-from ..database.models import Order, Product, AgentLog, get_session
+from config.settings import config
+from database.models import Order, Product, AgentLog, get_session
 
 
 class OrderTrackingManager:
@@ -153,7 +153,7 @@ Thanks for your support!
     
     async def process_review_submission(self, order_id: str, rating: int, review: str, photos: List[str] = None):
         """Process a submitted review"""
-        from ..database.models import ProductReview
+        from database.models import ProductReview
         
         order = self.session.query(Order).filter_by(shopify_order_id=order_id).first()
         if not order:
@@ -199,7 +199,7 @@ class AbandonedCartRecovery:
     
     async def process_abandoned_carts(self):
         """Process abandoned carts"""
-        from ..database.models import AbandonedCart
+        from database.models import AbandonedCart
         
         # Find abandoned carts
         carts = self.session.query(AbandonedCart).filter(
@@ -252,7 +252,7 @@ We noticed you left some items in your cart:
     
     async def mark_cart_recovered(self, cart_id: int):
         """Mark cart as recovered"""
-        from ..database.models import AbandonedCart
+        from database.models import AbandonedCart
         
         cart = self.session.query(AbandonedCart).get(cart_id)
         if cart:
@@ -271,7 +271,7 @@ class SocialProofInjector:
     
     def get_product_social_proof(self, product_id: int) -> Dict:
         """Get social proof for a product"""
-        from ..database.models import ProductReview, Sale
+        from database.models import ProductReview, Sale
         
         # Get recent sales
         recent_sales = self.session.query(Sale).filter(
@@ -313,7 +313,7 @@ class SocialProofInjector:
         recent_buyers = []
         
         for item in cart_items:
-            from ..database.models import Sale
+            from database.models import Sale
             sales = self.session.query(Sale).filter(
                 Sale.product_id == item['product_id'],
                 Sale.sale_date > datetime.utcnow() - timedelta(hours=24)
@@ -440,8 +440,8 @@ class CustomerEngagementAgent:
 # Standalone run
 async def run_customer_engagement_agent():
     """Run engagement agent standalone"""
-    from ..database.models import init_database
-    from ..config.settings import config
+    from database.models import init_database
+    from config.settings import config
     
     engine = init_database(config.database_path)
     session = get_session(engine)

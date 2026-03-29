@@ -13,8 +13,8 @@ from datetime import datetime
 import json
 import re
 
-from ..config.settings import config
-from ..database.models import Order, Product, AgentLog, get_session
+from config.settings import config
+from database.models import Order, Product, AgentLog, get_session
 
 
 @dataclass
@@ -373,8 +373,8 @@ class CustomerServiceChatbot:
 # Standalone run
 async def run_chatbot_agent():
     """Run chatbot agent standalone"""
-    from ..database.models import init_database
-    from ..config.settings import config
+    from database.models import init_database
+    from config.settings import config
     
     engine = init_database(config.database_path)
     session = get_session(engine)

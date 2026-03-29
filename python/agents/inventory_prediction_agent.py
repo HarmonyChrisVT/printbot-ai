@@ -12,8 +12,8 @@ from dataclasses import dataclass
 import statistics
 import json
 
-from ..config.settings import config
-from ..database.models import Product, Sale, Design, AgentLog, get_session
+from config.settings import config
+from database.models import Product, Sale, Design, AgentLog, get_session
 
 
 @dataclass
@@ -308,8 +308,8 @@ class InventoryPredictionAgent:
 # Standalone run
 async def run_inventory_prediction_agent():
     """Run prediction agent standalone"""
-    from ..database.models import init_database
-    from ..config.settings import config
+    from database.models import init_database
+    from config.settings import config
     
     engine = init_database(config.database_path)
     session = get_session(engine)

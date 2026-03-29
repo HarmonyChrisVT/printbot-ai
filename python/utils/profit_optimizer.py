@@ -8,8 +8,8 @@ from typing import List, Dict, Optional, Tuple
 from dataclasses import dataclass
 import statistics
 
-from ..database.models import Product, Sale, Order, AnalyticsDaily, get_session
-from ..config.settings import config
+from database.models import Product, Sale, Order, AnalyticsDaily, get_session
+from config.settings import config
 
 
 @dataclass
@@ -123,7 +123,7 @@ class BundleOptimizer:
     def find_bundle_opportunities(self) -> List[Dict]:
         """Find products that are frequently bought together"""
         # Get orders with multiple items
-        from ..database.models import Order, OrderItem
+        from database.models import Order, OrderItem
         
         orders = self.session.query(Order).all()
         
