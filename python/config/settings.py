@@ -17,7 +17,18 @@ class ShopifyConfig:
     api_secret: str = ""
     access_token: str = ""
     api_version: str = "2024-01"
-    
+
+    # Scopes the access token must have.  When creating or reviewing your
+    # Shopify app/custom token make sure ALL of these are granted.
+    required_scopes: List[str] = field(default_factory=lambda: [
+        "write_products",
+        "read_products",
+        "write_orders",
+        "read_orders",
+        "read_fulfillments",
+        "write_fulfillments",
+    ])
+
     @property
     def is_configured(self) -> bool:
         return all([self.shop_url, self.access_token])
