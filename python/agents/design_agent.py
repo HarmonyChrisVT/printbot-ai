@@ -18,6 +18,7 @@ from pathlib import Path
 
 from config.settings import config
 from database.models import Design, Product, TrendData, AgentLog, get_session
+from integrations.shopify import ShopifyAPI
 
 
 class TrendScanner:
@@ -58,7 +59,7 @@ class TrendScanner:
         try:
             url = "https://trends.google.com/trends/trendingsearches/daily/rss"
             async with aiohttp.ClientSession() as session:
-                async with session.get(url, timeout=10) as response:
+                async with session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as response:
                     if response.status == 200:
                         content = await response.text()
                         soup = BeautifulSoup(content, 'xml')
@@ -253,7 +254,7 @@ class DesignGenerator:
             filepath = self.output_dir / filename
             
             async with aiohttp.ClientSession() as session:
-                async with session.get(url, timeout=30) as response:
+                async with session.get(url, timeout=aiohttp.ClientTimeout(total=30)) as response:
                     if response.status == 200:
                         content = await response.read()
                         with open(filepath, 'wb') as f:
@@ -371,9 +372,59 @@ class DesignAgent:
         design.status = 'approved'
         design.approved_at = datetime.utcnow()
         design.approved_by = 'ai'
-        
         self.session.commit()
         print(f"✅ Design {design.id} auto-approved")
+
+        # Create Shopify product if configured
+        if config.shopify.is_configured:
+            await self._create_shopify_product(design)
+
+    async def _create_shopify_product(self, design: Design):
+        """Create a Shopify product from an approved design"""
+        try:
+            keyword = (design.trend_keywords or ["Custom Design"])[0]
+            title = f"{keyword.title()} - Graphic Tee"
+
+            shopify = ShopifyAPI()
+            product_data = {
+                'title': title,
+                'description': f'<p>Unique AI-generated design inspired by current trends. '
+                               f'Perfect for gifting or personal use.</p>',
+                'product_type': 't-shirt',
+                'tags': design.trend_keywords or [],
+                'image_urls': [design.image_url] if design.image_url else [],
+                'variants': [
+                    {'size': 'S',  'price': 24.99, 'sku': f'PBOT-{design.id}-S'},
+                    {'size': 'M',  'price': 24.99, 'sku': f'PBOT-{design.id}-M'},
+                    {'size': 'L',  'price': 24.99, 'sku': f'PBOT-{design.id}-L'},
+                    {'size': 'XL', 'price': 24.99, 'sku': f'PBOT-{design.id}-XL'},
+                ]
+            }
+
+            result = await shopify.create_product(product_data)
+            if result:
+                product = Product(
+                    shopify_id=str(result['id']),
+                    title=title,
+                    product_type='t-shirt',
+                    design_id=design.id,
+                    design_url=design.image_url,
+                    selling_price=24.99,
+                    is_active=True,
+                    is_approved=True,
+                )
+                self.session.add(product)
+                self.session.commit()
+                print(f"✅ Shopify product created: '{title}' (ID: {result['id']})")
+                self._log_action("product_created", "success", {
+                    "design_id": design.id,
+                    "shopify_id": result['id'],
+                    "title": title,
+                })
+            else:
+                print(f"⚠️  Shopify product creation failed for design {design.id}")
+        except Exception as e:
+            print(f"❌ Error creating Shopify product: {e}")
     
     def _log_action(self, action: str, status: str, details: Dict):
         """Log agent action"""

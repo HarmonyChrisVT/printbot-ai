@@ -250,6 +250,12 @@ def load_config_from_env():
     config.system.emergency_contact = os.getenv("EMERGENCY_CONTACT", "")
     config.system.backup_cloud_token = os.getenv("BACKUP_CLOUD_TOKEN", "")
 
+    # Design
+    config.design.auto_approve = os.getenv("AUTO_APPROVE", "true").lower() == "true"
+    max_daily = os.getenv("MAX_DAILY_DESIGNS")
+    if max_daily:
+        config.design.max_daily_designs = int(max_daily)
+
 
 def load_config_from_file(filepath: str):
     """Load configuration from JSON file"""

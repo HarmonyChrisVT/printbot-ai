@@ -443,14 +443,25 @@ const agentConfig: Record<string, {
 };
 
 function App() {
-  const [status] = useState<SystemStatus>(mockSystemStatus);
-  const [analytics] = useState<Analytics>(mockAnalytics);
+  const [status, setStatus] = useState<SystemStatus>(mockSystemStatus);
+  const [analytics, setAnalytics] = useState<Analytics>(mockAnalytics);
   const [activeTab, setActiveTab] = useState('dashboard');
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      // Poll /api/status
-    }, 5000);
+    const fetchData = async () => {
+      try {
+        const [statusRes, analyticsRes] = await Promise.all([
+          fetch('/api/status'),
+          fetch('/api/analytics'),
+        ]);
+        if (statusRes.ok) setStatus(await statusRes.json());
+        if (analyticsRes.ok) setAnalytics(await analyticsRes.json());
+      } catch (e) {
+        console.error('Failed to fetch status:', e);
+      }
+    };
+    fetchData();
+    const interval = setInterval(fetchData, 30000);
     return () => clearInterval(interval);
   }, []);
 

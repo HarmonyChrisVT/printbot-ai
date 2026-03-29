@@ -192,6 +192,7 @@ class PrintBotOrchestrator:
             asyncio.create_task(self.affiliate_agent.run()),
             asyncio.create_task(self.b2b_agent.run()),
             asyncio.create_task(self.competitor_spy_agent.run()),
+            asyncio.create_task(self.content_writer_agent.run()),
             asyncio.create_task(self.customer_engagement_agent.run()),
             asyncio.create_task(self.customer_service_chatbot.run()),
             asyncio.create_task(self.inventory_prediction_agent.run()),
@@ -227,6 +228,7 @@ class PrintBotOrchestrator:
         self.affiliate_agent.stop()
         self.b2b_agent.stop()
         self.competitor_spy_agent.stop()
+        self.content_writer_agent.stop()
         self.customer_engagement_agent.stop()
         self.customer_service_chatbot.stop()
         self.inventory_prediction_agent.stop()
@@ -289,21 +291,103 @@ class PrintBotOrchestrator:
     # API methods for dashboard
     def get_status(self) -> Dict:
         """Get current system status"""
+        from database.models import AgentLog, Design, Order, SocialPost
+        from sqlalchemy import func
+
+        today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+
+        def last_activity_str(agent_name: str) -> str:
+            log = self.session.query(AgentLog).filter(
+                AgentLog.agent_name == agent_name
+            ).order_by(AgentLog.created_at.desc()).first()
+            if not log:
+                return "Never"
+            diff = (datetime.utcnow() - log.created_at).total_seconds()
+            if diff < 60:
+                return f"{int(diff)} seconds ago"
+            if diff < 3600:
+                return f"{int(diff / 60)} minutes ago"
+            return f"{int(diff / 3600)} hours ago"
+
+        designs_today = self.session.query(func.count(Design.id)).filter(
+            Design.created_at >= today
+        ).scalar() or 0
+        designs_total = self.session.query(func.count(Design.id)).scalar() or 0
+        designs_pending = self.session.query(func.count(Design.id)).filter(
+            Design.status == 'pending'
+        ).scalar() or 0
+        orders_today = self.session.query(func.count(Order.id)).filter(
+            Order.created_at >= today
+        ).scalar() or 0
+        posts_today = self.session.query(func.count(SocialPost.id)).filter(
+            SocialPost.created_at >= today
+        ).scalar() or 0
+
+        dms = self.dead_mans_switch.get_status()
+
         return {
             'running': self.running,
-            'dead_mans_switch': self.dead_mans_switch.get_status(),
+            'deadMansSwitch': {
+                'isPaused': dms['is_paused'],
+                'lastCheckin': dms['last_checkin'],
+                'timeUntilPause': dms['time_until_pause'],
+            },
             'agents': {
-                'design': {'running': self.design_agent.running},
-                'pricing': {'running': self.pricing_agent.running},
-                'social': {'running': self.social_agent.running},
-                'fulfillment': {'running': self.fulfillment_agent.running},
-                'affiliate': {'running': self.affiliate_agent.running},
-                'b2b': {'running': self.b2b_agent.running},
-                'competitor_spy': {'running': self.competitor_spy_agent.running},
-                'content_writer': {'running': False},
-                'customer_engagement': {'running': self.customer_engagement_agent.running},
-                'customer_service': {'running': self.customer_service_chatbot.running},
-                'inventory_prediction': {'running': self.inventory_prediction_agent.running},
+                'design': {
+                    'name': 'Design Agent', 'running': self.design_agent.running,
+                    'lastActivity': last_activity_str('design'),
+                    'stats': {'designsToday': designs_today, 'designsTotal': designs_total, 'pendingApproval': designs_pending}
+                },
+                'pricing': {
+                    'name': 'Pricing Agent', 'running': self.pricing_agent.running,
+                    'lastActivity': last_activity_str('pricing'),
+                    'stats': {'productsUpdated': 0, 'avgMargin': 40}
+                },
+                'social': {
+                    'name': 'Social Agent', 'running': self.social_agent.running,
+                    'lastActivity': last_activity_str('social'),
+                    'stats': {'postsToday': posts_today, 'followers': 0, 'engagement': 0}
+                },
+                'fulfillment': {
+                    'name': 'Fulfillment Agent', 'running': self.fulfillment_agent.running,
+                    'lastActivity': last_activity_str('fulfillment'),
+                    'stats': {'ordersToday': orders_today, 'pendingOrders': 0, 'shippedToday': 0}
+                },
+                'b2b': {
+                    'name': 'B2B Agent', 'running': self.b2b_agent.running,
+                    'lastActivity': last_activity_str('b2b'),
+                    'stats': {'leadsContacted': 0, 'dealsActive': 0, 'quotesSent': 0}
+                },
+                'content_writer': {
+                    'name': 'Content Writer Agent', 'running': self.content_writer_agent.running,
+                    'lastActivity': last_activity_str('content_writer'),
+                    'stats': {'descriptionsWritten': 0, 'abTestsActive': 0}
+                },
+                'competitor_spy': {
+                    'name': 'Competitor Spy Agent', 'running': self.competitor_spy_agent.running,
+                    'lastActivity': last_activity_str('competitor_spy'),
+                    'stats': {'competitorsTracked': 0, 'priceChanges': 0, 'alertsTriggered': 0}
+                },
+                'inventory_prediction': {
+                    'name': 'Inventory Prediction Agent', 'running': self.inventory_prediction_agent.running,
+                    'lastActivity': last_activity_str('inventory_prediction'),
+                    'stats': {'productsAnalyzed': 0, 'restockAlerts': 0, 'forecastAccuracy': 0}
+                },
+                'customer_service': {
+                    'name': 'Customer Service Chatbot', 'running': self.customer_service_chatbot.running,
+                    'lastActivity': last_activity_str('customer_service'),
+                    'stats': {'ticketsHandled': 0, 'avgResponseTime': 0, 'satisfactionRate': 0}
+                },
+                'affiliate': {
+                    'name': 'Affiliate Agent', 'running': self.affiliate_agent.running,
+                    'lastActivity': last_activity_str('affiliate'),
+                    'stats': {'affiliatesActive': 0, 'clicksToday': 0, 'commissionsEarned': 0}
+                },
+                'customer_engagement': {
+                    'name': 'Customer Engagement Agent', 'running': self.customer_engagement_agent.running,
+                    'lastActivity': last_activity_str('customer_engagement'),
+                    'stats': {'emailsSent': 0, 'openRate': 0, 'campaignsActive': 0}
+                },
             },
             'config': {
                 'shopify': config.shopify.is_configured,
@@ -344,6 +428,7 @@ orchestrator = None
 async def startup():
     global orchestrator
     orchestrator = PrintBotOrchestrator()
+    asyncio.create_task(orchestrator.start())
 
 
 @app.get("/api/status")
@@ -374,18 +459,41 @@ async def manual_backup():
 
 @app.get("/api/analytics")
 async def get_analytics():
-    """Get analytics data"""
-    # Would query database for analytics
+    """Get analytics data from database"""
+    if not orchestrator:
+        return {"today": {"orders": 0, "revenue": 0, "profit": 0, "designs": 0, "posts": 0},
+                "week": {"orders": 0, "revenue": 0, "profit": 0}}
+
+    from database.models import Order, Sale, Design, SocialPost
+    from sqlalchemy import func
+
+    session = orchestrator.session
+    now = datetime.utcnow()
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    week_start = today_start.replace(day=today_start.day - today_start.weekday())
+
+    today_orders = session.query(func.count(Order.id)).filter(Order.created_at >= today_start).scalar() or 0
+    today_revenue = session.query(func.sum(Order.total_price)).filter(Order.created_at >= today_start).scalar() or 0.0
+    today_profit = session.query(func.sum(Sale.profit)).filter(Sale.sale_date >= today_start).scalar() or 0.0
+    today_designs = session.query(func.count(Design.id)).filter(Design.created_at >= today_start).scalar() or 0
+    today_posts = session.query(func.count(SocialPost.id)).filter(SocialPost.created_at >= today_start).scalar() or 0
+
+    week_orders = session.query(func.count(Order.id)).filter(Order.created_at >= week_start).scalar() or 0
+    week_revenue = session.query(func.sum(Order.total_price)).filter(Order.created_at >= week_start).scalar() or 0.0
+    week_profit = session.query(func.sum(Sale.profit)).filter(Sale.sale_date >= week_start).scalar() or 0.0
+
     return {
         "today": {
-            "orders": 0,
-            "revenue": 0,
-            "profit": 0
+            "orders": today_orders,
+            "revenue": round(float(today_revenue), 2),
+            "profit": round(float(today_profit), 2),
+            "designs": today_designs,
+            "posts": today_posts,
         },
         "week": {
-            "orders": 0,
-            "revenue": 0,
-            "profit": 0
+            "orders": week_orders,
+            "revenue": round(float(week_revenue), 2),
+            "profit": round(float(week_profit), 2),
         }
     }
 
