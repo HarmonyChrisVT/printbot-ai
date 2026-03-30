@@ -35,23 +35,26 @@ class ShopifyAPI:
                         if response.status == 200:
                             return await response.json()
                         else:
-                            print(f"❌ Shopify API error: {response.status}")
+                            body = await response.text()
+                            print(f"❌ Shopify API error {response.status} on {endpoint}: {body[:200]}")
                             return None
-                
+
                 elif method == 'POST':
                     async with session.post(url, json=data, timeout=30) as response:
                         if response.status in [200, 201]:
                             return await response.json()
                         else:
-                            print(f"❌ Shopify API error: {response.status}")
+                            body = await response.text()
+                            print(f"❌ Shopify API error {response.status} on {endpoint}: {body[:200]}")
                             return None
-                
+
                 elif method == 'PUT':
                     async with session.put(url, json=data, timeout=30) as response:
                         if response.status == 200:
                             return await response.json()
                         else:
-                            print(f"❌ Shopify API error: {response.status}")
+                            body = await response.text()
+                            print(f"❌ Shopify API error {response.status} on {endpoint}: {body[:200]}")
                             return None
                 
                 elif method == 'DELETE':
@@ -209,6 +212,21 @@ class ShopifyAPI:
         endpoint = '/shop.json'
         response = await self._request('GET', endpoint)
         return response.get('shop') if response else None
+
+    async def test_connection(self) -> Dict:
+        """
+        Validate the Custom App access token by hitting /shop.json.
+        Returns dict with 'ok' bool, 'shop_name', and 'message'.
+        """
+        if not self.shop_url or not self.access_token:
+            return {'ok': False, 'shop_name': None, 'message': 'SHOPIFY_SHOP_URL or SHOPIFY_ACCESS_TOKEN not set'}
+        try:
+            shop = await self.get_shop_info()
+            if shop:
+                return {'ok': True, 'shop_name': shop.get('name', 'Unknown'), 'message': 'Connected'}
+            return {'ok': False, 'shop_name': None, 'message': 'Token rejected — check scopes or token value'}
+        except Exception as e:
+            return {'ok': False, 'shop_name': None, 'message': str(e)}
     
     # Webhooks
     async def create_webhook(self, topic: str, address: str) -> Optional[Dict]:

@@ -101,7 +101,10 @@ class PrintBotOrchestratorV2:
         
         # Check configuration
         self._check_configuration()
-        
+
+        # Live Shopify connection test
+        await self._check_shopify_connection()
+
         # Initialize protection systems
         await self.protection.initialize()
         
@@ -186,7 +189,20 @@ class PrintBotOrchestratorV2:
         print(f"   TikTok: {tt_count} accounts")
         
         print("-" * 40)
-    
+
+    async def _check_shopify_connection(self):
+        """Live Shopify connection test using Custom App token"""
+        if not config.shopify.is_configured:
+            print("⚠️  Shopify: Not configured — set SHOPIFY_SHOP_URL and SHOPIFY_ACCESS_TOKEN")
+            return
+        from integrations.shopify import ShopifyAPI
+        result = await ShopifyAPI().test_connection()
+        if result['ok']:
+            print(f"✅ Shopify: Connected (Shop: {result['shop_name']})")
+        else:
+            print(f"❌ Shopify: Connection failed — {result['message']}")
+            print("   → Check SHOPIFY_SETUP.md for instructions")
+
     async def _check_fulfillment_providers(self):
         """Check health of all fulfillment providers"""
         print("\n🏥 Checking fulfillment provider health...")

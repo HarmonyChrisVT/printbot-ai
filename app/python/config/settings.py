@@ -11,13 +11,16 @@ from datetime import timedelta
 
 @dataclass
 class ShopifyConfig:
-    """Shopify API Configuration"""
-    shop_url: str = ""  # your-store.myshopify.com
-    api_key: str = ""   # Admin API key
-    api_secret: str = ""
-    access_token: str = ""
+    """Shopify Custom App Configuration
+
+    Uses a permanent Admin API access token (shpat_...) from a Shopify Custom App.
+    No OAuth flow required — just set SHOPIFY_SHOP_URL and SHOPIFY_ACCESS_TOKEN.
+    See SHOPIFY_SETUP.md for step-by-step instructions.
+    """
+    shop_url: str = ""      # e.g. your-store.myshopify.com
+    access_token: str = ""  # shpat_... token from Custom App
     api_version: str = "2024-01"
-    
+
     @property
     def is_configured(self) -> bool:
         return all([self.shop_url, self.access_token])
@@ -207,11 +210,9 @@ config = AppConfig()
 
 def load_config_from_env():
     """Load configuration from environment variables"""
-    # Shopify
+    # Shopify (Custom App — only two vars needed)
     config.shopify.shop_url = os.getenv("SHOPIFY_SHOP_URL", "")
     config.shopify.access_token = os.getenv("SHOPIFY_ACCESS_TOKEN", "")
-    config.shopify.api_key = os.getenv("SHOPIFY_API_KEY", "")
-    config.shopify.api_secret = os.getenv("SHOPIFY_API_SECRET", "")
     
     # Printful
     config.printful.api_key = os.getenv("PRINTFUL_API_KEY", "")

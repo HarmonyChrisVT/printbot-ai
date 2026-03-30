@@ -181,9 +181,12 @@ class PrintBotOrchestrator:
         """Start all agents"""
         print("\n🟢 Starting all agents...")
         self.running = True
-        
+
         # Check configuration
         self._check_configuration()
+
+        # Live Shopify connection test
+        await self._check_shopify_connection()
         
         # Create agent tasks — Master Orchestrator runs first
         self.agent_tasks = [
@@ -244,9 +247,22 @@ class PrintBotOrchestrator:
         for name, is_configured in checks:
             status = "✅" if is_configured else "⚠️"
             print(f"{status} {name}: {'Connected' if is_configured else 'Not configured'}")
-        
+
         print("-" * 30)
-    
+
+    async def _check_shopify_connection(self):
+        """Live Shopify connection test using Custom App token"""
+        if not config.shopify.is_configured:
+            print("⚠️  Shopify: Not configured — set SHOPIFY_SHOP_URL and SHOPIFY_ACCESS_TOKEN")
+            return
+        from integrations.shopify import ShopifyAPI
+        result = await ShopifyAPI().test_connection()
+        if result['ok']:
+            print(f"✅ Shopify: Connected (Shop: {result['shop_name']})")
+        else:
+            print(f"❌ Shopify: Connection failed — {result['message']}")
+            print("   → Check SHOPIFY_SETUP.md for instructions")
+
     async def _monitoring_loop(self):
         """Monitor system health and dead man's switch"""
         while self.running:

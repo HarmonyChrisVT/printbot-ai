@@ -11,7 +11,8 @@ alembic==1.13.1
 
 # API Clients
 openai==1.10.0
-shopifyapi==12.3.0
+# Note: Shopify integration uses direct aiohttp calls with X-Shopify-Access-Token header.
+# No shopifyapi library needed — Custom App token auth is fully handled in integrations/shopify.py.
 
 # Web Scraping
 aiohttp==3.9.1
