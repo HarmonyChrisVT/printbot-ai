@@ -302,14 +302,17 @@ class PrintBotOrchestrator:
     
     # API methods for dashboard
     def get_status(self) -> Dict:
-        """Get current system status"""
-        from database.models import AgentLog, Design, Order, SocialPost
+        """Get current system status — all stats pulled from DB, no hardcoded values."""
+        from database.models import AgentLog, Design, Order, SocialPost, Product, CompetitorPrice
         from sqlalchemy import func
 
         today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        s = self.session
+
+        # ── Helpers ──────────────────────────────────────────────────────────
 
         def last_activity_str(agent_name: str) -> str:
-            log = self.session.query(AgentLog).filter(
+            log = s.query(AgentLog).filter(
                 AgentLog.agent_name == agent_name
             ).order_by(AgentLog.created_at.desc()).first()
             if not log:
@@ -321,19 +324,62 @@ class PrintBotOrchestrator:
                 return f"{int(diff / 60)} minutes ago"
             return f"{int(diff / 3600)} hours ago"
 
-        designs_today = self.session.query(func.count(Design.id)).filter(
-            Design.created_at >= today
-        ).scalar() or 0
-        designs_total = self.session.query(func.count(Design.id)).scalar() or 0
-        designs_pending = self.session.query(func.count(Design.id)).filter(
-            Design.status == 'pending'
-        ).scalar() or 0
-        orders_today = self.session.query(func.count(Order.id)).filter(
-            Order.created_at >= today
-        ).scalar() or 0
-        posts_today = self.session.query(func.count(SocialPost.id)).filter(
-            SocialPost.created_at >= today
-        ).scalar() or 0
+        def log_count_today(agent_name: str, action: str = None) -> int:
+            """Count AgentLog rows for today, optionally filtered by action."""
+            q = s.query(func.count(AgentLog.id)).filter(
+                AgentLog.agent_name == agent_name,
+                AgentLog.created_at >= today,
+            )
+            if action:
+                q = q.filter(AgentLog.action == action)
+            return q.scalar() or 0
+
+        def log_count_total(agent_name: str, action: str = None) -> int:
+            q = s.query(func.count(AgentLog.id)).filter(AgentLog.agent_name == agent_name)
+            if action:
+                q = q.filter(AgentLog.action == action)
+            return q.scalar() or 0
+
+        # ── Design ───────────────────────────────────────────────────────────
+        designs_today   = s.query(func.count(Design.id)).filter(Design.created_at >= today).scalar() or 0
+        designs_total   = s.query(func.count(Design.id)).scalar() or 0
+        designs_pending = s.query(func.count(Design.id)).filter(Design.status == 'pending').scalar() or 0
+
+        # ── Products ─────────────────────────────────────────────────────────
+        products_active = s.query(func.count(Product.id)).filter(Product.is_active == True).scalar() or 0
+        raw_avg_margin  = s.query(func.avg(Product.margin_percent)).filter(Product.margin_percent != None).scalar()
+        avg_margin      = round(float(raw_avg_margin), 1) if raw_avg_margin else 0.0
+        products_today  = s.query(func.count(Product.id)).filter(Product.created_at >= today).scalar() or 0
+
+        # ── Orders ───────────────────────────────────────────────────────────
+        orders_today    = s.query(func.count(Order.id)).filter(Order.created_at >= today).scalar() or 0
+        pending_orders  = s.query(func.count(Order.id)).filter(Order.fulfillment_status == 'unfulfilled').scalar() or 0
+        shipped_today   = s.query(func.count(Order.id)).filter(Order.shipped_at >= today).scalar() or 0
+
+        # ── Social posts ─────────────────────────────────────────────────────
+        posts_today = s.query(func.count(SocialPost.id)).filter(SocialPost.created_at >= today).scalar() or 0
+        posts_total = s.query(func.count(SocialPost.id)).scalar() or 0
+
+        # ── Competitors ──────────────────────────────────────────────────────
+        competitors_tracked  = s.query(func.count(func.distinct(CompetitorPrice.competitor_name))).scalar() or 0
+        price_changes_today  = s.query(func.count(CompetitorPrice.id)).filter(CompetitorPrice.scraped_at >= today).scalar() or 0
+
+        # ── Per-agent log counts ──────────────────────────────────────────────
+        pricing_updated_today     = log_count_today('pricing', 'price_updated')
+        b2b_leads_today           = log_count_today('b2b', 'lead_contacted')
+        b2b_quotes_today          = log_count_today('b2b', 'quote_sent')
+        b2b_actions_today         = log_count_today('b2b')
+        content_written_today     = log_count_today('content_writer', 'content_written')
+        content_written_total     = log_count_total('content_writer', 'content_written')
+        spy_alerts_today          = log_count_today('competitor_spy', 'price_change_detected')
+        inv_alerts_today          = log_count_today('inventory_prediction', 'alert_triggered')
+        cs_handled_today          = log_count_today('customer_service')
+        affiliate_actions_today   = log_count_today('affiliate')
+        engagement_emails_today   = log_count_today('customer_engagement')
+        cart_emails_today         = log_count_today('conversion', 'cart_recovery_email')
+        cart_emails_total         = log_count_total('conversion', 'cart_recovery_email')
+        outreach_today            = log_count_today('outreach', 'reddit_engagement')
+        outreach_total            = log_count_total('outreach', 'reddit_engagement')
 
         dms = self.dead_mans_switch.get_status()
 
@@ -348,74 +394,114 @@ class PrintBotOrchestrator:
                 'design': {
                     'name': 'Design Agent', 'running': self.design_agent.running,
                     'lastActivity': last_activity_str('design'),
-                    'stats': {'designsToday': designs_today, 'designsTotal': designs_total, 'pendingApproval': designs_pending}
+                    'stats': {
+                        'designsToday': designs_today,
+                        'designsTotal': designs_total,
+                        'pendingApproval': designs_pending,
+                        'productsCreated': products_today,
+                    }
                 },
                 'pricing': {
                     'name': 'Pricing Agent', 'running': self.pricing_agent.running,
                     'lastActivity': last_activity_str('pricing'),
-                    'stats': {'productsUpdated': 0, 'avgMargin': 40}
+                    'stats': {
+                        'productsActive': products_active,
+                        'updatedToday': pricing_updated_today,
+                        'avgMargin': avg_margin,
+                    }
                 },
                 'social': {
                     'name': 'Social Agent', 'running': self.social_agent.running,
                     'lastActivity': last_activity_str('social'),
-                    'stats': {'postsToday': posts_today, 'followers': 0, 'engagement': 0}
+                    'stats': {
+                        'postsToday': posts_today,
+                        'postsTotal': posts_total,
+                        'actionsToday': log_count_today('social'),
+                    }
                 },
                 'fulfillment': {
                     'name': 'Fulfillment Agent', 'running': self.fulfillment_agent.running,
                     'lastActivity': last_activity_str('fulfillment'),
-                    'stats': {'ordersToday': orders_today, 'pendingOrders': 0, 'shippedToday': 0}
+                    'stats': {
+                        'ordersToday': orders_today,
+                        'pendingOrders': pending_orders,
+                        'shippedToday': shipped_today,
+                    }
                 },
                 'b2b': {
                     'name': 'B2B Agent', 'running': self.b2b_agent.running,
                     'lastActivity': last_activity_str('b2b'),
-                    'stats': {'leadsContacted': 0, 'dealsActive': 0, 'quotesSent': 0}
+                    'stats': {
+                        'actionsToday': b2b_actions_today,
+                        'leadsToday': b2b_leads_today,
+                        'quotesToday': b2b_quotes_today,
+                    }
                 },
                 'content_writer': {
                     'name': 'Content Writer Agent', 'running': self.content_writer_agent.running,
                     'lastActivity': last_activity_str('content_writer'),
-                    'stats': {'descriptionsWritten': 0, 'abTestsActive': 0}
+                    'stats': {
+                        'writtenToday': content_written_today,
+                        'writtenTotal': content_written_total,
+                    }
                 },
                 'competitor_spy': {
                     'name': 'Competitor Spy Agent', 'running': self.competitor_spy_agent.running,
                     'lastActivity': last_activity_str('competitor_spy'),
-                    'stats': {'competitorsTracked': 0, 'priceChanges': 0, 'alertsTriggered': 0}
+                    'stats': {
+                        'competitorsTracked': competitors_tracked,
+                        'priceChangesToday': price_changes_today,
+                        'alertsToday': spy_alerts_today,
+                    }
                 },
                 'inventory_prediction': {
                     'name': 'Inventory Prediction Agent', 'running': self.inventory_prediction_agent.running,
                     'lastActivity': last_activity_str('inventory_prediction'),
-                    'stats': {'productsAnalyzed': 0, 'restockAlerts': 0, 'forecastAccuracy': 0}
+                    'stats': {
+                        'productsTracked': products_active,
+                        'alertsToday': inv_alerts_today,
+                        'alertsTotal': log_count_total('inventory_prediction', 'alert_triggered'),
+                    }
                 },
                 'customer_service': {
                     'name': 'Customer Service Chatbot', 'running': self.customer_service_chatbot.running,
                     'lastActivity': last_activity_str('customer_service'),
-                    'stats': {'ticketsHandled': 0, 'avgResponseTime': 0, 'satisfactionRate': 0}
+                    'stats': {
+                        'handledToday': cs_handled_today,
+                        'handledTotal': log_count_total('customer_service'),
+                    }
                 },
                 'affiliate': {
                     'name': 'Affiliate Agent', 'running': self.affiliate_agent.running,
                     'lastActivity': last_activity_str('affiliate'),
-                    'stats': {'affiliatesActive': 0, 'clicksToday': 0, 'commissionsEarned': 0}
+                    'stats': {
+                        'actionsToday': affiliate_actions_today,
+                        'actionsTotal': log_count_total('affiliate'),
+                    }
                 },
                 'customer_engagement': {
                     'name': 'Customer Engagement Agent', 'running': self.customer_engagement_agent.running,
                     'lastActivity': last_activity_str('customer_engagement'),
-                    'stats': {'emailsSent': 0, 'openRate': 0, 'campaignsActive': 0}
+                    'stats': {
+                        'emailsToday': engagement_emails_today,
+                        'emailsTotal': log_count_total('customer_engagement'),
+                    }
                 },
                 'conversion': {
                     'name': 'Conversion Agent', 'running': self.conversion_agent.running,
                     'lastActivity': last_activity_str('conversion'),
                     'stats': {
-                        'cartsRecovered': 0,
-                        'emailsSent': 0,
-                        'avgDiscount': 15,
+                        'emailsToday': cart_emails_today,
+                        'emailsTotal': cart_emails_total,
                     }
                 },
                 'outreach': {
                     'name': 'Outreach Agent', 'running': self.outreach_agent.running,
                     'lastActivity': last_activity_str('outreach'),
                     'stats': {
-                        'postsEngaged': 0,
+                        'engagedToday': outreach_today,
+                        'engagedTotal': outreach_total,
                         'subredditsMonitored': 10,
-                        'leadsGenerated': 0,
                     }
                 },
                 'influencer': {
@@ -499,9 +585,10 @@ async def get_analytics():
     """Get analytics data from database"""
     if not orchestrator:
         return {"today": {"orders": 0, "revenue": 0, "profit": 0, "designs": 0, "posts": 0},
-                "week": {"orders": 0, "revenue": 0, "profit": 0}}
+                "week": {"orders": 0, "revenue": 0, "profit": 0},
+                "avgOrderValue": 0.0, "avgMargin": 0.0}
 
-    from database.models import Order, Sale, Design, SocialPost
+    from database.models import Order, Sale, Design, SocialPost, Product
     from sqlalchemy import func
 
     session = orchestrator.session
@@ -519,6 +606,13 @@ async def get_analytics():
     week_revenue = session.query(func.sum(Order.total_price)).filter(Order.created_at >= week_start).scalar() or 0.0
     week_profit = session.query(func.sum(Sale.profit)).filter(Sale.sale_date >= week_start).scalar() or 0.0
 
+    all_orders = session.query(func.count(Order.id)).scalar() or 0
+    all_revenue = session.query(func.sum(Order.total_price)).scalar() or 0.0
+    avg_order_value = round(float(all_revenue) / all_orders, 2) if all_orders > 0 else 0.0
+
+    raw_avg_margin = session.query(func.avg(Product.margin_percent)).filter(Product.margin_percent != None).scalar()
+    avg_margin = round(float(raw_avg_margin), 1) if raw_avg_margin else 0.0
+
     return {
         "today": {
             "orders": today_orders,
@@ -531,7 +625,36 @@ async def get_analytics():
             "orders": week_orders,
             "revenue": round(float(week_revenue), 2),
             "profit": round(float(week_profit), 2),
-        }
+        },
+        "avgOrderValue": avg_order_value,
+        "avgMargin": avg_margin,
+    }
+
+
+@app.get("/api/logs")
+async def get_logs(limit: int = 50):
+    """Get recent agent activity logs"""
+    if not orchestrator:
+        return {"logs": []}
+
+    from database.models import AgentLog
+
+    logs = orchestrator.session.query(AgentLog).order_by(
+        AgentLog.created_at.desc()
+    ).limit(limit).all()
+
+    return {
+        "logs": [
+            {
+                "id": log.id,
+                "agent": log.agent_name,
+                "action": log.action,
+                "status": log.status,
+                "details": log.details or {},
+                "createdAt": log.created_at.isoformat() if log.created_at else None,
+            }
+            for log in logs
+        ]
     }
 
 

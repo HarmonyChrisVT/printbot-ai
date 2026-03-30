@@ -67,122 +67,47 @@ interface Analytics {
     revenue: number;
     profit: number;
   };
+  avgOrderValue: number;
+  avgMargin: number;
 }
 
-// Mock data for demo
-const mockSystemStatus: SystemStatus = {
-  running: true,
+interface LogEntry {
+  id: number;
+  agent: string;
+  action: string;
+  status: string;
+  details: Record<string, unknown>;
+  createdAt: string;
+}
+
+// Initial empty state (zeros) — replaced by real API data on load
+const emptyStatus: SystemStatus = {
+  running: false,
   agents: {
-    design: {
-      name: 'Design Agent',
-      running: true,
-      lastActivity: '2 minutes ago',
-      stats: { designsToday: 2, designsTotal: 47, pendingApproval: 1 }
-    },
-    pricing: {
-      name: 'Pricing Agent',
-      running: true,
-      lastActivity: '15 minutes ago',
-      stats: { productsUpdated: 12, avgMargin: 32.5 }
-    },
-    social: {
-      name: 'Social Agent',
-      running: true,
-      lastActivity: '1 hour ago',
-      stats: { postsToday: 3, followers: 1247, engagement: 4.2 }
-    },
-    fulfillment: {
-      name: 'Fulfillment Agent',
-      running: true,
-      lastActivity: '30 seconds ago',
-      stats: { ordersToday: 5, pendingOrders: 2, shippedToday: 3 }
-    },
-    b2b: {
-      name: 'B2B Agent',
-      running: true,
-      lastActivity: '45 minutes ago',
-      stats: { leadsContacted: 8, dealsActive: 3, quotesSent: 5 }
-    },
-    content_writer: {
-      name: 'Content Writer Agent',
-      running: true,
-      lastActivity: '20 minutes ago',
-      stats: { descriptionsWritten: 14, abTestsActive: 3 }
-    },
-    competitor_spy: {
-      name: 'Competitor Spy Agent',
-      running: true,
-      lastActivity: '2 hours ago',
-      stats: { competitorsTracked: 5, priceChanges: 7, alertsTriggered: 2 }
-    },
-    inventory_prediction: {
-      name: 'Inventory Prediction Agent',
-      running: true,
-      lastActivity: '3 hours ago',
-      stats: { productsAnalyzed: 32, restockAlerts: 4, forecastAccuracy: 87 }
-    },
-    customer_service: {
-      name: 'Customer Service Chatbot',
-      running: true,
-      lastActivity: '5 minutes ago',
-      stats: { ticketsHandled: 11, avgResponseTime: 42, satisfactionRate: 94 }
-    },
-    affiliate: {
-      name: 'Affiliate Agent',
-      running: true,
-      lastActivity: '1 hour ago',
-      stats: { affiliatesActive: 12, clicksToday: 340, commissionsEarned: 28 }
-    },
-    customer_engagement: {
-      name: 'Customer Engagement Agent',
-      running: true,
-      lastActivity: '10 minutes ago',
-      stats: { emailsSent: 45, openRate: 38, campaignsActive: 2 }
-    },
-    conversion: {
-      name: 'Conversion Agent',
-      running: true,
-      lastActivity: '12 minutes ago',
-      stats: { cartsRecovered: 3, emailsSent: 7, avgDiscount: 15 }
-    },
-    outreach: {
-      name: 'Outreach Agent',
-      running: true,
-      lastActivity: '2 hours ago',
-      stats: { postsEngaged: 8, subredditsMonitored: 10, leadsGenerated: 4 }
-    },
-    influencer: {
-      name: 'Influencer Agent',
-      running: true,
-      lastActivity: '4 hours ago',
-      stats: { total_identified: 24, queued: 18, contacted: 6, responded: 2, converted: 1 }
-    }
+    design:               { name: 'Design Agent',               running: false, lastActivity: '—', stats: { designsToday: 0, designsTotal: 0, pendingApproval: 0, productsCreated: 0 } },
+    pricing:              { name: 'Pricing Agent',              running: false, lastActivity: '—', stats: { productsActive: 0, updatedToday: 0, avgMargin: 0 } },
+    social:               { name: 'Social Agent',               running: false, lastActivity: '—', stats: { postsToday: 0, postsTotal: 0, actionsToday: 0 } },
+    fulfillment:          { name: 'Fulfillment Agent',          running: false, lastActivity: '—', stats: { ordersToday: 0, pendingOrders: 0, shippedToday: 0 } },
+    b2b:                  { name: 'B2B Agent',                  running: false, lastActivity: '—', stats: { actionsToday: 0, leadsToday: 0, quotesToday: 0 } },
+    content_writer:       { name: 'Content Writer Agent',       running: false, lastActivity: '—', stats: { writtenToday: 0, writtenTotal: 0 } },
+    competitor_spy:       { name: 'Competitor Spy Agent',       running: false, lastActivity: '—', stats: { competitorsTracked: 0, priceChangesToday: 0, alertsToday: 0 } },
+    inventory_prediction: { name: 'Inventory Prediction Agent', running: false, lastActivity: '—', stats: { productsTracked: 0, alertsToday: 0, alertsTotal: 0 } },
+    customer_service:     { name: 'Customer Service Chatbot',   running: false, lastActivity: '—', stats: { handledToday: 0, handledTotal: 0 } },
+    affiliate:            { name: 'Affiliate Agent',            running: false, lastActivity: '—', stats: { actionsToday: 0, actionsTotal: 0 } },
+    customer_engagement:  { name: 'Customer Engagement Agent',  running: false, lastActivity: '—', stats: { emailsToday: 0, emailsTotal: 0 } },
+    conversion:           { name: 'Conversion Agent',           running: false, lastActivity: '—', stats: { emailsToday: 0, emailsTotal: 0 } },
+    outreach:             { name: 'Outreach Agent',             running: false, lastActivity: '—', stats: { engagedToday: 0, engagedTotal: 0, subredditsMonitored: 10 } },
+    influencer:           { name: 'Influencer Agent',           running: false, lastActivity: '—', stats: { total_identified: 0, queued: 0, contacted: 0, responded: 0, converted: 0 } },
   },
-  config: {
-    shopify: true,
-    printful: true,
-    openai: true
-  },
-  deadMansSwitch: {
-    isPaused: false,
-    lastCheckin: new Date().toISOString(),
-    timeUntilPause: 82800
-  }
+  config: { shopify: false, printful: false, openai: false },
+  deadMansSwitch: { isPaused: false, lastCheckin: new Date().toISOString(), timeUntilPause: 86400 },
 };
 
-const mockAnalytics: Analytics = {
-  today: {
-    orders: 5,
-    revenue: 247.95,
-    profit: 89.25,
-    designs: 2,
-    posts: 3
-  },
-  week: {
-    orders: 34,
-    revenue: 1684.50,
-    profit: 589.75
-  }
+const emptyAnalytics: Analytics = {
+  today: { orders: 0, revenue: 0, profit: 0, designs: 0, posts: 0 },
+  week:  { orders: 0, revenue: 0, profit: 0 },
+  avgOrderValue: 0,
+  avgMargin: 0,
 };
 
 // Components
@@ -210,7 +135,7 @@ function AgentCard({ agent, icon: Icon, color }: { agent: AgentStatus; icon: any
           {Object.entries(agent.stats).map(([key, value]) => (
             <div key={key} className="flex justify-between text-sm">
               <span className="text-muted-foreground capitalize">
-                {key.replace(/([A-Z])/g, ' $1').trim()}
+                {key.replace(/([A-Z])/g, ' $1').replace(/_/g, ' ').trim()}
               </span>
               <span className="font-medium">{value}</span>
             </div>
@@ -333,87 +258,82 @@ function DeadMansSwitch({ status }: { status: SystemStatus['deadMansSwitch'] }) 
   );
 }
 
-// Agent definitions: icon, color, description, detail rows
+// Agent definitions: icon, color, description, static config values only (no fake stats)
 const agentConfig: Record<string, {
   icon: any;
   color: string;
   description: string;
-  details: { label: string; value: string }[];
+  config: { label: string; value: string }[];
 }> = {
   design: {
     icon: Palette,
     color: 'bg-gradient-to-br from-pink-500 to-rose-500',
     description: 'Scans trends and generates AI designs every 30 minutes',
-    details: [
-      { label: 'Daily Limit', value: '2 / 3 designs' },
+    config: [
+      { label: 'Daily Limit', value: '3 designs' },
       { label: 'Trend Sources', value: '4 active' },
-      { label: 'Auto-Approve', value: 'Off' },
-      { label: 'Next Scan', value: '18 minutes' },
+      { label: 'Auto-Approve', value: 'Enabled' },
+      { label: 'Interval', value: '30 minutes' },
     ],
   },
   pricing: {
     icon: DollarSign,
     color: 'bg-gradient-to-br from-green-500 to-emerald-500',
     description: 'Monitors competitors and adjusts prices every 2 hours',
-    details: [
+    config: [
       { label: 'Anchor Margin', value: '40%' },
       { label: 'Floor Margin', value: '25%' },
-      { label: 'Competitors', value: '5 tracked' },
       { label: 'Charm Pricing', value: 'Enabled' },
+      { label: 'Interval', value: 'Every 2 hours' },
     ],
   },
   social: {
     icon: Share2,
     color: 'bg-gradient-to-br from-blue-500 to-cyan-500',
     description: 'Manages Instagram & TikTok presence every 6 hours',
-    details: [
-      { label: 'Daily Actions', value: '45 / 100' },
+    config: [
       { label: 'Instagram Accounts', value: '3 configured' },
       { label: 'TikTok Accounts', value: '3 configured' },
       { label: 'Auto-Like', value: 'Enabled' },
+      { label: 'Daily Action Limit', value: '100 actions' },
     ],
   },
   fulfillment: {
     icon: Package,
     color: 'bg-gradient-to-br from-orange-500 to-amber-500',
     description: 'Processes orders via Printful every 5 minutes',
-    details: [
-      { label: 'Pending Orders', value: '2 orders' },
+    config: [
       { label: 'Provider', value: 'Printful' },
       { label: 'Backup', value: 'Printify' },
       { label: 'Auto-Tracking', value: 'Enabled' },
+      { label: 'Interval', value: 'Every 5 min' },
     ],
   },
   b2b: {
     icon: Briefcase,
     color: 'bg-gradient-to-br from-violet-500 to-purple-500',
     description: 'Identifies and contacts wholesale & bulk order leads',
-    details: [
-      { label: 'Leads Contacted', value: '8 today' },
-      { label: 'Active Deals', value: '3 in progress' },
+    config: [
       { label: 'Min Order Qty', value: '10 units' },
       { label: 'Wholesale Discount', value: '20%' },
+      { label: 'Interval', value: 'Every 4 hours' },
     ],
   },
   content_writer: {
     icon: FileText,
     color: 'bg-gradient-to-br from-teal-500 to-green-500',
     description: 'Generates SEO-optimized product titles and descriptions',
-    details: [
-      { label: 'Descriptions Written', value: '14 today' },
-      { label: 'A/B Tests Active', value: '3 running' },
+    config: [
       { label: 'SEO Optimizer', value: 'Enabled' },
       { label: 'Model', value: 'GPT-4' },
+      { label: 'Interval', value: 'Every 5 min' },
     ],
   },
   competitor_spy: {
     icon: Eye,
     color: 'bg-gradient-to-br from-slate-500 to-gray-600',
     description: 'Tracks competitor pricing and product launches',
-    details: [
-      { label: 'Competitors Tracked', value: '5 stores' },
-      { label: 'Price Changes', value: '7 today' },
-      { label: 'Alerts Triggered', value: '2 today' },
+    config: [
       { label: 'Scan Interval', value: 'Every 2 hours' },
     ],
   },
@@ -421,51 +341,43 @@ const agentConfig: Record<string, {
     icon: BarChart2,
     color: 'bg-gradient-to-br from-indigo-500 to-blue-600',
     description: 'Predicts stock needs and triggers restock alerts',
-    details: [
-      { label: 'Products Analyzed', value: '32 SKUs' },
-      { label: 'Restock Alerts', value: '4 active' },
-      { label: 'Forecast Accuracy', value: '87%' },
+    config: [
       { label: 'Lookback Window', value: '90 days' },
+      { label: 'Interval', value: 'Every 6 hours' },
     ],
   },
   customer_service: {
     icon: MessageSquare,
     color: 'bg-gradient-to-br from-sky-500 to-blue-500',
     description: 'Handles customer inquiries and support tickets automatically',
-    details: [
-      { label: 'Tickets Handled', value: '11 today' },
-      { label: 'Avg Response Time', value: '42 seconds' },
-      { label: 'Satisfaction Rate', value: '94%' },
-      { label: 'Escalations', value: '1 today' },
+    config: [
+      { label: 'Model', value: 'GPT-4' },
+      { label: 'Auto-Respond', value: 'Enabled' },
     ],
   },
   affiliate: {
     icon: Users,
     color: 'bg-gradient-to-br from-rose-500 to-pink-600',
     description: 'Manages affiliate partners and tracks commissions',
-    details: [
-      { label: 'Active Affiliates', value: '12 partners' },
-      { label: 'Clicks Today', value: '340' },
-      { label: 'Commissions Earned', value: '$28 today' },
+    config: [
       { label: 'Commission Rate', value: '10%' },
+      { label: 'Interval', value: 'Every hour' },
     ],
   },
   customer_engagement: {
     icon: Heart,
     color: 'bg-gradient-to-br from-fuchsia-500 to-pink-500',
     description: 'Runs email campaigns and re-engagement sequences',
-    details: [
-      { label: 'Emails Sent', value: '45 today' },
-      { label: 'Open Rate', value: '38%' },
-      { label: 'Active Campaigns', value: '2 running' },
-      { label: 'Unsubscribe Rate', value: '0.4%' },
+    config: [
+      { label: 'Auto-Campaigns', value: 'Enabled' },
+      { label: 'Unsubscribe Target', value: '< 0.5%' },
     ],
   },
   conversion: {
     icon: ShoppingCart,
     color: 'bg-gradient-to-br from-orange-600 to-red-500',
     description: 'Recovers abandoned carts with escalating discounts (10% → 15% → 20%)',
-    details: [
+    config: [
       { label: '1hr Trigger', value: '10% off code' },
       { label: '24hr Trigger', value: '15% off code' },
       { label: '72hr Trigger', value: '20% off — final' },
@@ -476,7 +388,7 @@ const agentConfig: Record<string, {
     icon: Megaphone,
     color: 'bg-gradient-to-br from-cyan-600 to-blue-600',
     description: 'Finds buying-intent posts on Reddit & forums and engages naturally',
-    details: [
+    config: [
       { label: 'Subreddits', value: '10 monitored' },
       { label: 'Intent Keywords', value: '18 tracked' },
       { label: 'Max / Cycle', value: '8 engagements' },
@@ -487,7 +399,7 @@ const agentConfig: Record<string, {
     icon: Star,
     color: 'bg-gradient-to-br from-yellow-500 to-amber-600',
     description: 'Identifies micro-influencers (1K–100K) and queues collab DMs',
-    details: [
+    config: [
       { label: 'Follower Range', value: '1K – 100K' },
       { label: 'Min Engagement', value: '2%' },
       { label: 'Offer', value: 'Free product' },
@@ -496,20 +408,34 @@ const agentConfig: Record<string, {
   },
 };
 
+function formatLogTime(isoString: string): string {
+  const diff = (Date.now() - new Date(isoString).getTime()) / 1000;
+  if (diff < 60) return `${Math.floor(diff)}s ago`;
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  return `${Math.floor(diff / 86400)}d ago`;
+}
+
 function App() {
-  const [status, setStatus] = useState<SystemStatus>(mockSystemStatus);
-  const [analytics, setAnalytics] = useState<Analytics>(mockAnalytics);
+  const [status, setStatus] = useState<SystemStatus>(emptyStatus);
+  const [analytics, setAnalytics] = useState<Analytics>(emptyAnalytics);
+  const [logs, setLogs] = useState<LogEntry[]>([]);
   const [activeTab, setActiveTab] = useState('dashboard');
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [statusRes, analyticsRes] = await Promise.all([
+        const [statusRes, analyticsRes, logsRes] = await Promise.all([
           fetch('/api/status'),
           fetch('/api/analytics'),
+          fetch('/api/logs?limit=50'),
         ]);
         if (statusRes.ok) setStatus(await statusRes.json());
         if (analyticsRes.ok) setAnalytics(await analyticsRes.json());
+        if (logsRes.ok) {
+          const data = await logsRes.json();
+          setLogs(data.logs || []);
+        }
       } catch (e) {
         console.error('Failed to fetch status:', e);
       }
@@ -567,13 +493,11 @@ function App() {
               <StatCard
                 title="Today's Revenue"
                 value={`$${analytics.today.revenue.toFixed(2)}`}
-                change="+12% from yesterday"
                 icon={DollarSign}
               />
               <StatCard
                 title="Today's Orders"
                 value={analytics.today.orders.toString()}
-                change="+3 new today"
                 icon={Package}
               />
               <StatCard
@@ -588,7 +512,7 @@ function App() {
               />
             </div>
 
-            {/* Agents Grid — all 11 */}
+            {/* Agents Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {agentKeys.map((key) => {
                 const agent = status.agents[key];
@@ -633,15 +557,38 @@ function App() {
                       </div>
                       <CardDescription>{cfg.description}</CardDescription>
                     </CardHeader>
-                    <CardContent>
-                      <div className="grid grid-cols-2 gap-3 text-sm">
-                        {cfg.details.map((d) => (
-                          <div key={d.label}>
-                            <p className="text-muted-foreground">{d.label}</p>
-                            <p className="font-medium">{d.value}</p>
-                          </div>
-                        ))}
+                    <CardContent className="space-y-4">
+                      {/* Live stats from API */}
+                      <div>
+                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Live Stats</p>
+                        <div className="grid grid-cols-2 gap-2 text-sm">
+                          {Object.entries(agent.stats).map(([key, value]) => (
+                            <div key={key}>
+                              <p className="text-muted-foreground capitalize">
+                                {key.replace(/([A-Z])/g, ' $1').replace(/_/g, ' ').trim()}
+                              </p>
+                              <p className="font-medium">{value}</p>
+                            </div>
+                          ))}
+                        </div>
                       </div>
+                      {/* Static configuration */}
+                      {cfg.config.length > 0 && (
+                        <>
+                          <Separator />
+                          <div>
+                            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Configuration</p>
+                            <div className="grid grid-cols-2 gap-2 text-sm">
+                              {cfg.config.map((d) => (
+                                <div key={d.label}>
+                                  <p className="text-muted-foreground">{d.label}</p>
+                                  <p className="font-medium">{d.value}</p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </>
+                      )}
                     </CardContent>
                   </Card>
                 );
@@ -704,15 +651,17 @@ function App() {
                   <div className="space-y-3">
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Avg Order Value</span>
-                      <span className="font-medium">$49.59</span>
+                      <span className="font-medium">${analytics.avgOrderValue.toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground">Profit Margin</span>
-                      <span className="font-medium">36%</span>
+                      <span className="text-muted-foreground">Avg Profit Margin</span>
+                      <span className="font-medium">
+                        {analytics.avgMargin > 0 ? `${analytics.avgMargin}%` : '—'}
+                      </span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground">Engagement Rate</span>
-                      <span className="font-medium">4.2%</span>
+                      <span className="text-muted-foreground">Week Revenue</span>
+                      <span className="font-medium">${analytics.week.revenue.toFixed(2)}</span>
                     </div>
                   </div>
                 </CardContent>
@@ -722,30 +671,25 @@ function App() {
             <Card>
               <CardHeader>
                 <CardTitle>Recent Activity Log</CardTitle>
+                <CardDescription>Last {logs.length} events from all agents</CardDescription>
               </CardHeader>
               <CardContent>
                 <ScrollArea className="h-64">
                   <div className="space-y-2">
-                    {[
-                      { time: '2 min ago', agent: 'Design', action: 'Generated design: "Monday Motivation"', status: 'success' },
-                      { time: '5 min ago', agent: 'Customer Service', action: 'Resolved ticket #482: shipping inquiry', status: 'success' },
-                      { time: '5 min ago', agent: 'Fulfillment', action: 'Order #1024 shipped', status: 'success' },
-                      { time: '10 min ago', agent: 'Engagement', action: 'Sent re-engagement campaign to 45 customers', status: 'success' },
-                      { time: '15 min ago', agent: 'Pricing', action: 'Updated 12 product prices', status: 'success' },
-                      { time: '20 min ago', agent: 'Content Writer', action: 'Wrote descriptions for 14 products', status: 'success' },
-                      { time: '45 min ago', agent: 'B2B', action: 'Contacted 8 wholesale leads', status: 'success' },
-                      { time: '1 hour ago', agent: 'Social', action: 'Posted to Instagram @printbot_main', status: 'success' },
-                      { time: '1 hour ago', agent: 'Affiliate', action: '340 affiliate clicks tracked', status: 'success' },
-                      { time: '2 hours ago', agent: 'Competitor Spy', action: '7 competitor price changes detected', status: 'success' },
-                      { time: '3 hours ago', agent: 'Inventory', action: '4 restock alerts triggered', status: 'success' },
-                    ].map((log, i) => (
-                      <div key={i} className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted">
-                        <div className={`w-2 h-2 rounded-full ${log.status === 'success' ? 'bg-green-500' : 'bg-red-500'}`} />
-                        <span className="text-xs text-muted-foreground w-20 shrink-0">{log.time}</span>
-                        <Badge variant="outline" className="text-xs shrink-0">{log.agent}</Badge>
-                        <span className="text-sm">{log.action}</span>
-                      </div>
-                    ))}
+                    {logs.length === 0 ? (
+                      <p className="text-sm text-muted-foreground text-center py-8">No activity logged yet.</p>
+                    ) : (
+                      logs.map((log) => (
+                        <div key={log.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted">
+                          <div className={`w-2 h-2 rounded-full shrink-0 ${log.status === 'success' ? 'bg-green-500' : log.status === 'error' ? 'bg-red-500' : 'bg-yellow-500'}`} />
+                          <span className="text-xs text-muted-foreground w-20 shrink-0">
+                            {log.createdAt ? formatLogTime(log.createdAt) : '—'}
+                          </span>
+                          <Badge variant="outline" className="text-xs shrink-0 capitalize">{log.agent}</Badge>
+                          <span className="text-sm truncate">{log.action.replace(/_/g, ' ')}</span>
+                        </div>
+                      ))
+                    )}
                   </div>
                 </ScrollArea>
               </CardContent>
