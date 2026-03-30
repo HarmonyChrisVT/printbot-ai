@@ -11,7 +11,6 @@ import {
   PauseCircle,
   PlayCircle,
   Settings,
-  Database,
   Shield,
   Zap,
   Briefcase,
@@ -354,6 +353,265 @@ function DeadMansSwitch({ status }: { status: SystemStatus['deadMansSwitch'] }) 
           <CheckCircle className="w-4 h-4 mr-2" />
           {checkinState === 'loading' ? 'Checking in…' : checkinState === 'success' ? 'Checked In!' : 'Check In Now'}
         </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ── Manual design trigger button ─────────────────────────────────────────────
+
+function TriggerDesignButton({ disabled }: { disabled: boolean }) {
+  const [state, setState] = useState<'idle' | 'loading' | 'ok' | 'err'>('idle');
+
+  async function handleTrigger() {
+    setState('loading');
+    try {
+      const res = await fetch('/api/trigger/design', { method: 'POST' });
+      setState(res.ok ? 'ok' : 'err');
+      setTimeout(() => setState('idle'), 8000);
+    } catch {
+      setState('err');
+      setTimeout(() => setState('idle'), 8000);
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      <Button className="w-full" onClick={handleTrigger}
+        disabled={disabled || state === 'loading' || state === 'ok'}>
+        <Zap className="w-4 h-4 mr-2" />
+        {state === 'loading' ? 'Triggering…'
+          : state === 'ok'  ? '✅ Triggered! Check Shopify in ~60s'
+          : state === 'err' ? '❌ Failed — check backend logs'
+          : 'Trigger Design Now'}
+      </Button>
+      {disabled && (
+        <p className="text-xs text-muted-foreground text-center">
+          Connect Shopify and OpenAI first.
+        </p>
+      )}
+    </div>
+  );
+}
+
+// ── Setup / credentials form ──────────────────────────────────────────────────
+
+interface CfgStatus {
+  shopify_shop_url: boolean;
+  shopify_access_token: boolean;
+  openai_api_key: boolean;
+  printful_api_key: boolean;
+  design_auto_approve: boolean;
+}
+
+function SetupForm({ onSaved }: { onSaved: () => void }) {
+  const [form, setForm] = useState({
+    shopify_shop_url: '',
+    shopify_access_token: '',
+    openai_api_key: '',
+    printful_api_key: '',
+    design_auto_approve: true,
+  });
+  const [show, setShow] = useState({ shopify: false, openai: false, printful: false });
+  const [saving, setSaving] = useState(false);
+  const [result, setResult] = useState<null | {
+    status: string;
+    shopify_test: { ok: boolean; shop_name: string | null; message: string } | null;
+  }>(null);
+  const [cfg, setCfg] = useState<CfgStatus | null>(null);
+
+  useEffect(() => {
+    fetch('/api/config/status')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data) {
+          setCfg(data);
+          setForm(f => ({ ...f, design_auto_approve: data.design_auto_approve ?? true }));
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  async function handleSave(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setResult(null);
+    try {
+      const res = await fetch('/api/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(form),
+      });
+      const data = await res.json();
+      setResult(data);
+      if (data.status === 'saved') {
+        onSaved();
+        fetch('/api/config/status').then(r => r.json()).then(setCfg).catch(() => {});
+        setForm(f => ({ ...f, shopify_access_token: '', openai_api_key: '', printful_api_key: '' }));
+      }
+    } catch {
+      setResult({ status: 'error', shopify_test: null });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const shopifyOk  = cfg?.shopify_shop_url && cfg?.shopify_access_token;
+  const openaiOk   = cfg?.openai_api_key;
+  const printfulOk = cfg?.printful_api_key;
+
+  function Section({ ok, required, children }: { ok: boolean | undefined; required?: boolean; children: React.ReactNode }) {
+    const border = ok ? 'border-green-300 bg-green-50/40' : required ? 'border-red-300 bg-red-50/40' : 'border-gray-200 bg-gray-50/30';
+    return <div className={`space-y-3 p-4 rounded-lg border-2 ${border}`}>{children}</div>;
+  }
+
+  function FieldRow({ label, placeholder, value, onChange, showKey, note }: {
+    label: string; placeholder: string; value: string;
+    onChange: (v: string) => void; showKey: keyof typeof show; note?: string;
+  }) {
+    return (
+      <div>
+        <label className="text-xs font-medium text-muted-foreground block mb-1">{label}</label>
+        <div className="flex gap-2">
+          <input
+            type={show[showKey] ? 'text' : 'password'}
+            placeholder={placeholder}
+            value={value}
+            onChange={e => onChange(e.target.value)}
+            className="flex-1 px-3 py-2 border rounded-md text-sm bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+          />
+          <Button type="button" variant="outline" size="sm"
+            onClick={() => setShow(s => ({ ...s, [showKey]: !s[showKey] }))}>
+            {show[showKey] ? 'Hide' : 'Show'}
+          </Button>
+        </div>
+        {note && <p className="text-xs text-muted-foreground mt-1">{note}</p>}
+      </div>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center gap-3">
+          <Settings className="w-5 h-5" />
+          <CardTitle>Connect Your Services</CardTitle>
+        </div>
+        <CardDescription>
+          Enter your credentials here — saved instantly to the server and take effect without restarting.
+          Leave a field blank to keep the current value.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={handleSave} className="space-y-4">
+
+          {/* Shopify */}
+          <Section ok={shopifyOk} required>
+            <div className="flex items-center justify-between">
+              <p className="font-semibold text-sm flex items-center gap-2"><Package className="w-4 h-4" /> Shopify</p>
+              <Badge variant={shopifyOk ? 'default' : 'destructive'} className="text-xs">
+                {shopifyOk ? '✓ Connected' : '✗ Not Connected'}
+              </Badge>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground block mb-1">Store URL</label>
+              <input
+                type="text"
+                placeholder={cfg?.shopify_shop_url ? 'already set — leave blank to keep' : 'your-store.myshopify.com'}
+                value={form.shopify_shop_url}
+                onChange={e => setForm(f => ({ ...f, shopify_shop_url: e.target.value }))}
+                className="w-full px-3 py-2 border rounded-md text-sm bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+              <p className="text-xs text-muted-foreground mt-1">No https:// prefix — just your-store.myshopify.com</p>
+            </div>
+            <FieldRow
+              label="Admin API Token (shpat_...)"
+              placeholder={cfg?.shopify_access_token ? '••••• already set — leave blank to keep' : 'shpat_xxxxxxxxxxxxxxxxxx'}
+              value={form.shopify_access_token}
+              onChange={v => setForm(f => ({ ...f, shopify_access_token: v }))}
+              showKey="shopify"
+              note="Shopify Admin → Settings → Apps → Develop apps → your app → API credentials → Reveal token"
+            />
+          </Section>
+
+          {/* OpenAI */}
+          <Section ok={openaiOk} required>
+            <div className="flex items-center justify-between">
+              <p className="font-semibold text-sm flex items-center gap-2"><Zap className="w-4 h-4" /> OpenAI</p>
+              <Badge variant={openaiOk ? 'default' : 'destructive'} className="text-xs">
+                {openaiOk ? '✓ Configured' : '✗ Not Set'}
+              </Badge>
+            </div>
+            <FieldRow
+              label="API Key"
+              placeholder={cfg?.openai_api_key ? '••••• already set' : 'sk-...'}
+              value={form.openai_api_key}
+              onChange={v => setForm(f => ({ ...f, openai_api_key: v }))}
+              showKey="openai"
+            />
+          </Section>
+
+          {/* Printful */}
+          <Section ok={printfulOk}>
+            <div className="flex items-center justify-between">
+              <p className="font-semibold text-sm flex items-center gap-2"><Package className="w-4 h-4" /> Printful</p>
+              <Badge variant={printfulOk ? 'default' : 'secondary'} className="text-xs">
+                {printfulOk ? '✓ Configured' : 'Optional'}
+              </Badge>
+            </div>
+            <FieldRow
+              label="API Key"
+              placeholder={cfg?.printful_api_key ? '••••• already set' : 'Your Printful API key'}
+              value={form.printful_api_key}
+              onChange={v => setForm(f => ({ ...f, printful_api_key: v }))}
+              showKey="printful"
+            />
+          </Section>
+
+          {/* Auto-approve toggle */}
+          <div className={`flex items-center justify-between p-4 rounded-lg border-2 ${
+            form.design_auto_approve ? 'border-green-300 bg-green-50/40' : 'border-amber-300 bg-amber-50/40'
+          }`}>
+            <div className="flex-1 mr-4">
+              <p className="font-semibold text-sm">Auto-Approve Designs → Shopify</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {form.design_auto_approve
+                  ? 'Designs will automatically become live Shopify products.'
+                  : '⚠️ Off — designs are created but will never reach your Shopify store.'}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setForm(f => ({ ...f, design_auto_approve: !f.design_auto_approve }))}
+              className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition-colors ${
+                form.design_auto_approve ? 'bg-green-500' : 'bg-gray-300'
+              }`}
+            >
+              <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
+                form.design_auto_approve ? 'translate-x-6' : 'translate-x-1'
+              }`} />
+            </button>
+          </div>
+
+          {/* Result */}
+          {result && (
+            <Alert className={result.shopify_test?.ok ? 'border-green-500 bg-green-50' : ''}>
+              <AlertDescription className="text-sm">
+                {result.status === 'saved' && result.shopify_test?.ok
+                  ? `✅ Saved! Shopify connected — shop: "${result.shopify_test.shop_name}". Products will appear within 30 min.`
+                  : result.status === 'saved' && result.shopify_test
+                  ? `⚠️ Saved, but Shopify test failed: ${result.shopify_test.message} — double-check your token.`
+                  : result.status === 'saved'
+                  ? '✅ Credentials saved.'
+                  : '❌ Could not save — is the backend running?'}
+              </AlertDescription>
+            </Alert>
+          )}
+
+          <Button type="submit" className="w-full" disabled={saving}>
+            {saving ? 'Saving & Testing Connection…' : 'Save & Test Connection'}
+          </Button>
+        </form>
       </CardContent>
     </Card>
   );
@@ -826,6 +1084,22 @@ function App() {
         </div>
       )}
 
+      {/* Setup required banner */}
+      {apiConnected && !status.config.shopify && (
+        <div className="bg-amber-50 border-b border-amber-300 px-4 py-2">
+          <div className="container mx-auto flex items-center gap-2 text-amber-800 text-sm">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            Shopify is not connected — no products will be created until you add your credentials.{' '}
+            <button
+              onClick={() => setActiveTab('config')}
+              className="font-semibold underline hover:no-underline ml-1"
+            >
+              Go to Configuration →
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Main Content */}
       <main className="container mx-auto px-4 py-6">
         <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -1074,28 +1348,38 @@ function App() {
 
           {/* Configuration Tab */}
           <TabsContent value="config" className="space-y-6">
+            <SetupForm onSaved={() => {
+              // Re-fetch status so the header badges update immediately
+              fetch('/api/status').then(r => r.ok ? r.json() : null).then(data => {
+                if (data) setStatus(mapApiStatus(data));
+              }).catch(() => {});
+            }} />
+
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Quick-trigger card */}
               <Card>
                 <CardHeader>
                   <div className="flex items-center gap-3">
-                    <Database className="w-5 h-5" />
-                    <CardTitle>Integrations</CardTitle>
+                    <Zap className="w-5 h-5" />
+                    <CardTitle>Test the Pipeline</CardTitle>
                   </div>
                   <CardDescription>
-                    Connection status for all integrated services
+                    Manually trigger one full design → approve → Shopify product cycle right now.
+                    Check your Shopify Products page after ~60 seconds.
                   </CardDescription>
                 </CardHeader>
-                <CardContent>
-                  <ConfigStatus name="Shopify Store" connected={status.config.shopify} />
+                <CardContent className="space-y-3">
+                  <ConfigStatus name="Shopify Store"  connected={status.config.shopify} />
                   <Separator />
-                  <ConfigStatus name="Printful" connected={status.config.printful} />
+                  <ConfigStatus name="OpenAI"         connected={status.config.openai} />
                   <Separator />
-                  <ConfigStatus name="OpenAI" connected={status.config.openai} />
+                  <ConfigStatus name="Printful"       connected={status.config.printful} />
                   <Separator />
-                  <ConfigStatus name="Email SMTP" connected={false} />
+                  <TriggerDesignButton disabled={!status.config.shopify || !status.config.openai} />
                 </CardContent>
               </Card>
 
+              {/* Backup & Security */}
               <Card>
                 <CardHeader>
                   <div className="flex items-center gap-3">
@@ -1122,11 +1406,6 @@ function App() {
                     </div>
                     <Badge variant="secondary">Not Configured</Badge>
                   </div>
-                  <Separator />
-                  <Button variant="outline" className="w-full">
-                    <Database className="w-4 h-4 mr-2" />
-                    Create Manual Backup
-                  </Button>
                 </CardContent>
               </Card>
             </div>

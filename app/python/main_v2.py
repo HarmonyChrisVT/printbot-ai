@@ -329,6 +329,9 @@ app.add_middleware(
 # Global orchestrator instance
 orchestrator = None
 
+# Credentials saved via the dashboard are persisted here so they survive restarts
+CONFIG_RUNTIME_FILE = "/app/data/.env.runtime"
+
 
 class OverrideRequest(BaseModel):
     agent_name: str
@@ -337,9 +340,44 @@ class OverrideRequest(BaseModel):
     reason: str
 
 
+class ConfigRequest(BaseModel):
+    shopify_shop_url: str = ""
+    shopify_access_token: str = ""
+    openai_api_key: str = ""
+    printful_api_key: str = ""
+    design_auto_approve: bool = False
+
+
+def _persist_config():
+    """Write current credentials to a runtime file so they reload on next startup."""
+    import os as _os
+    try:
+        _os.makedirs("/app/data", exist_ok=True)
+        lines = []
+        for key, val in [
+            ("SHOPIFY_SHOP_URL",     config.shopify.shop_url),
+            ("SHOPIFY_ACCESS_TOKEN", config.shopify.access_token),
+            ("OPENAI_API_KEY",       config.openai.api_key),
+            ("PRINTFUL_API_KEY",     config.printful.api_key),
+            ("DESIGN_AUTO_APPROVE",  str(config.design.auto_approve).lower()),
+        ]:
+            if val:
+                lines.append(f"{key}={val}\n")
+        with open(CONFIG_RUNTIME_FILE, "w") as fh:
+            fh.writelines(lines)
+    except Exception as e:
+        print(f"⚠️  Could not persist config: {e}")
+
+
 @app.on_event("startup")
 async def startup():
     global orchestrator
+    # Load previously saved runtime credentials before initialising the orchestrator
+    import os as _os
+    if _os.path.exists(CONFIG_RUNTIME_FILE):
+        from dotenv import load_dotenv as _ld
+        _ld(CONFIG_RUNTIME_FILE, override=True)
+        print(f"✅ Loaded saved credentials from {CONFIG_RUNTIME_FILE}")
     orchestrator = PrintBotOrchestratorV2()
     asyncio.create_task(orchestrator.start())
 
@@ -467,6 +505,63 @@ async def get_profit_analytics():
             "margin": 42.9
         }
     }
+
+
+@app.get("/api/config/status")
+async def get_config_status():
+    """Returns which fields are configured (booleans only — values never exposed)."""
+    return {
+        "shopify_shop_url":       bool(config.shopify.shop_url),
+        "shopify_access_token":   bool(config.shopify.access_token),
+        "openai_api_key":         bool(config.openai.api_key),
+        "printful_api_key":       bool(config.printful.api_key),
+        "design_auto_approve":    config.design.auto_approve,
+    }
+
+
+@app.post("/api/config")
+async def save_config_endpoint(request: ConfigRequest):
+    """
+    Save credentials entered via the dashboard setup form.
+    Updates the in-memory config immediately and persists to /app/data/.env.runtime
+    so values are re-loaded on the next restart.
+    Returns a live Shopify connection test result.
+    """
+    import os as _os
+
+    if request.shopify_shop_url:
+        # Strip https:// — common mistake
+        url = request.shopify_shop_url.strip().rstrip("/")
+        url = url.replace("https://", "").replace("http://", "")
+        config.shopify.shop_url = url
+        _os.environ["SHOPIFY_SHOP_URL"] = url
+
+    if request.shopify_access_token:
+        token = request.shopify_access_token.strip()
+        config.shopify.access_token = token
+        _os.environ["SHOPIFY_ACCESS_TOKEN"] = token
+
+    if request.openai_api_key:
+        key = request.openai_api_key.strip()
+        config.openai.api_key = key
+        _os.environ["OPENAI_API_KEY"] = key
+
+    if request.printful_api_key:
+        key = request.printful_api_key.strip()
+        config.printful.api_key = key
+        _os.environ["PRINTFUL_API_KEY"] = key
+
+    config.design.auto_approve = request.design_auto_approve
+
+    _persist_config()
+
+    # Run a live Shopify connection test immediately
+    shopify_test = None
+    if config.shopify.is_configured:
+        from integrations.shopify import ShopifyAPI
+        shopify_test = await ShopifyAPI().test_connection()
+
+    return {"status": "saved", "shopify_test": shopify_test}
 
 
 @app.get("/api/test")
