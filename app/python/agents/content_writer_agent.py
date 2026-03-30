@@ -13,8 +13,8 @@ from datetime import datetime
 import json
 import re
 
-from ..config.settings import config
-from ..database.models import Product, AgentLog, get_session
+from config.settings import config
+from database.models import Product, AgentLog, get_session
 
 
 @dataclass
@@ -269,8 +269,8 @@ Format as JSON:
 # Standalone run
 async def run_content_writer_agent():
     """Run content writer agent standalone"""
-    from ..database.models import init_database
-    from ..config.settings import config
+    from database.models import init_database
+    from config.settings import config
     
     engine = init_database(config.database_path)
     session = get_session(engine)

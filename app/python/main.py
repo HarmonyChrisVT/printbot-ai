@@ -8,7 +8,11 @@ import signal
 import sys
 from datetime import datetime
 from pathlib import Path
+from typing import Dict
 import json
+
+from dotenv import load_dotenv
+load_dotenv()
 
 from config.settings import config, load_config_from_env
 from database.models import init_database, get_session, SystemEvent
@@ -310,6 +314,7 @@ orchestrator = None
 async def startup():
     global orchestrator
     orchestrator = PrintBotOrchestrator()
+    asyncio.create_task(orchestrator.start())
 
 
 @app.get("/api/status")

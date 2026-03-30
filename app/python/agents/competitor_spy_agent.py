@@ -15,8 +15,8 @@ import json
 import re
 import hashlib
 
-from ..config.settings import config
-from ..database.models import AgentLog, get_session
+from config.settings import config
+from database.models import AgentLog, get_session
 
 
 @dataclass
@@ -317,8 +317,8 @@ class CompetitorSpyAgent:
 # Standalone run
 async def run_competitor_spy_agent():
     """Run spy agent standalone"""
-    from ..database.models import init_database
-    from ..config.settings import config
+    from database.models import init_database
+    from config.settings import config
     
     engine = init_database(config.database_path)
     session = get_session(engine)

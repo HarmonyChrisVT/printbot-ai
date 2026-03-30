@@ -13,8 +13,8 @@ import json
 import os
 from pathlib import Path
 
-from ..config.settings import config
-from ..database.models import SocialPost, Product, AgentLog, get_session
+from config.settings import config
+from database.models import SocialPost, Product, AgentLog, get_session
 
 
 class HumanEmulator:
@@ -402,7 +402,7 @@ class SocialAgent:
 # Standalone run function
 async def run_social_agent():
     """Run social agent standalone"""
-    from ..database.models import init_database
+    from database.models import init_database
     
     engine = init_database(config.database_path)
     session = get_session(engine)

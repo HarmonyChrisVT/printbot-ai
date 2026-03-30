@@ -16,8 +16,8 @@ import os
 import re
 from pathlib import Path
 
-from ..config.settings import config
-from ..database.models import Design, Product, TrendData, AgentLog, get_session
+from config.settings import config
+from database.models import Design, Product, ProductVariant, TrendData, AgentLog, get_session
 
 
 class TrendScanner:
@@ -371,9 +371,82 @@ class DesignAgent:
         design.status = 'approved'
         design.approved_at = datetime.utcnow()
         design.approved_by = 'ai'
-        
         self.session.commit()
         print(f"✅ Design {design.id} auto-approved")
+
+        # Create Shopify product from approved design
+        await self._create_product_from_design(design)
+
+    async def _create_product_from_design(self, design: Design):
+        """Create a product in Shopify and the local database from an approved design"""
+        from integrations.shopify import ShopifyAPI
+
+        keyword = (design.trend_keywords[0] if design.trend_keywords else 'New Design')
+        title = f"{keyword.title()} - Print on Demand"
+        description = f"<p>Trending design featuring {keyword}. High-quality print-on-demand product available in multiple sizes.</p>"
+        base_price = 24.99
+
+        product_data = {
+            'title': title,
+            'description': description,
+            'product_type': 'T-Shirt',
+            'tags': design.trend_keywords or [],
+            'image_urls': [design.image_url] if design.image_url else [],
+            'variants': [
+                {'size': 'S',  'price': base_price,      'sku': f'SKU-{design.id}-S',  'inventory': 100},
+                {'size': 'M',  'price': base_price,      'sku': f'SKU-{design.id}-M',  'inventory': 100},
+                {'size': 'L',  'price': base_price,      'sku': f'SKU-{design.id}-L',  'inventory': 100},
+                {'size': 'XL', 'price': base_price + 2,  'sku': f'SKU-{design.id}-XL', 'inventory': 100},
+                {'size': '2XL','price': base_price + 2,  'sku': f'SKU-{design.id}-2XL','inventory': 100},
+            ]
+        }
+
+        shopify_product = None
+        shopify_id = None
+        if config.shopify.is_configured:
+            shopify = ShopifyAPI()
+            shopify_product = await shopify.create_product(product_data)
+            shopify_id = str(shopify_product['id']) if shopify_product else None
+
+        # Save product to local database
+        product = Product(
+            shopify_id=shopify_id,
+            title=title,
+            description=description,
+            product_type='T-Shirt',
+            tags=design.trend_keywords or [],
+            design_id=design.id,
+            design_url=design.image_url,
+            selling_price=base_price,
+            is_active=True,
+            is_approved=True,
+        )
+        self.session.add(product)
+        self.session.flush()  # get product.id
+
+        # Save variants
+        for v in product_data['variants']:
+            variant = ProductVariant(
+                product_id=product.id,
+                size=v['size'],
+                sku=v['sku'],
+                selling_price=v['price'],
+                inventory_quantity=v['inventory'],
+            )
+            self.session.add(variant)
+
+        self.session.commit()
+
+        if shopify_id:
+            print(f"✅ Product '{title}' created in Shopify (ID: {shopify_id})")
+        else:
+            print(f"⚠️  Product '{title}' saved locally (Shopify not configured or request failed)")
+
+        self._log_action("product_created", "success" if shopify_id else "warning", {
+            "design_id": design.id,
+            "title": title,
+            "shopify_id": shopify_id,
+        })
     
     def _log_action(self, action: str, status: str, details: Dict):
         """Log agent action"""
@@ -400,7 +473,7 @@ class DesignAgent:
 # Standalone run function
 async def run_design_agent():
     """Run design agent standalone"""
-    from ..database.models import init_database
+    from database.models import init_database
     
     engine = init_database(config.database_path)
     session = get_session(engine)

@@ -10,8 +10,8 @@ from dataclasses import dataclass
 from datetime import datetime
 import json
 
-from ..config.settings import config
-from ..database.models import Order, AgentLog
+from config.settings import config
+from database.models import Order, AgentLog
 
 
 @dataclass

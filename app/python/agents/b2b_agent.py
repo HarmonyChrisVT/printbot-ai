@@ -10,8 +10,8 @@ from typing import List, Dict, Optional
 from dataclasses import dataclass
 import json
 
-from ..config.settings import config
-from ..database.models import Order, Product, AgentLog, get_session
+from config.settings import config
+from database.models import Order, Product, AgentLog, get_session
 
 
 @dataclass
@@ -61,7 +61,7 @@ class B2BEmailCapture:
     
     async def capture_email(self, email: str, source: str, metadata: Dict = None) -> bool:
         """Capture email from visitor"""
-        from ..database.models import EmailLead
+        from database.models import EmailLead
         
         # Check if already captured
         existing = self.session.query(EmailLead).filter_by(email=email).first()
@@ -100,7 +100,7 @@ class B2BEmailCapture:
     
     async def send_nurture_sequence(self, lead_id: int):
         """Send automated nurture sequence"""
-        from ..database.models import EmailLead
+        from database.models import EmailLead
         
         lead = self.session.query(EmailLead).get(lead_id)
         if not lead:
@@ -276,7 +276,7 @@ class B2BAgent:
     
     async def _process_bulk_quotes(self):
         """Process pending bulk quotes"""
-        from ..database.models import BulkQuote
+        from database.models import BulkQuote
         
         pending_quotes = self.session.query(BulkQuote).filter(
             BulkQuote.status == 'pending',
@@ -312,7 +312,7 @@ class B2BAgent:
     
     async def _check_credit_limits(self):
         """Check corporate client credit limits"""
-        from ..database.models import CorporateClient
+        from database.models import CorporateClient
         
         clients = self.session.query(CorporateClient).filter(
             CorporateClient.is_approved == True
@@ -325,7 +325,7 @@ class B2BAgent:
     
     async def _process_nurture_sequences(self):
         """Process email nurture sequences"""
-        from ..database.models import EmailLead
+        from database.models import EmailLead
         
         # Get leads that need nurture emails
         leads = self.session.query(EmailLead).filter(
@@ -356,7 +356,7 @@ class B2BAgent:
     # Public API methods
     async def create_bulk_quote(self, client_id: int, items: List[Dict]) -> BulkQuote:
         """Create a bulk quote"""
-        from ..database.models import CorporateClient
+        from database.models import CorporateClient
         
         client = self.session.query(CorporateClient).get(client_id)
         if not client:
@@ -374,7 +374,7 @@ class B2BAgent:
     
     def _save_quote(self, quote: BulkQuote):
         """Save quote to database"""
-        from ..database.models import BulkQuote as BulkQuoteModel
+        from database.models import BulkQuote as BulkQuoteModel
         
         db_quote = BulkQuoteModel(
             client_id=quote.client_id,
@@ -422,8 +422,8 @@ class B2BAgent:
 # Standalone run function
 async def run_b2b_agent():
     """Run B2B agent standalone"""
-    from ..database.models import init_database
-    from ..config.settings import config
+    from database.models import init_database
+    from config.settings import config
     
     engine = init_database(config.database_path)
     session = get_session(engine)

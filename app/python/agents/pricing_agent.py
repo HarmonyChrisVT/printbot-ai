@@ -13,8 +13,8 @@ from typing import List, Dict, Optional, Tuple
 import json
 import re
 
-from ..config.settings import config
-from ..database.models import Product, CompetitorPrice, AgentLog, get_session
+from config.settings import config
+from database.models import Product, CompetitorPrice, AgentLog, get_session
 
 
 class CompetitorScraper:
@@ -327,7 +327,7 @@ class PricingAgent:
     async def _update_shopify_price(self, product: Product):
         """Update price on Shopify"""
         try:
-            from ..integrations.shopify import ShopifyAPI
+            from integrations.shopify import ShopifyAPI
             shopify = ShopifyAPI()
             await shopify.update_product_price(
                 product.shopify_id,
@@ -365,7 +365,7 @@ class PricingAgent:
 # Standalone run function
 async def run_pricing_agent():
     """Run pricing agent standalone"""
-    from ..database.models import init_database
+    from database.models import init_database
     
     engine = init_database(config.database_path)
     session = get_session(engine)

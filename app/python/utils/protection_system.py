@@ -13,8 +13,8 @@ from dataclasses import dataclass, asdict
 from enum import Enum
 import aiohttp
 
-from ..config.settings import config
-from ..database.models import SystemEvent, AgentLog, get_session
+from config.settings import config
+from database.models import SystemEvent, AgentLog, get_session
 
 
 class RiskLevel(Enum):

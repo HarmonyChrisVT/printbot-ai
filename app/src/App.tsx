@@ -442,15 +442,68 @@ const agentConfig: Record<string, {
   },
 };
 
+function mapApiStatus(data: any): SystemStatus {
+  // Map snake_case API response to camelCase frontend types,
+  // merging with mock data so agents without live stats still render.
+  const agents = { ...mockSystemStatus.agents };
+  if (data.agents) {
+    for (const [key, val] of Object.entries(data.agents as Record<string, any>)) {
+      if (agents[key]) {
+        agents[key] = { ...agents[key], running: val.running ?? agents[key].running };
+      }
+    }
+  }
+  const dms = data.dead_mans_switch ?? data.deadMansSwitch ?? {};
+  return {
+    running: data.running ?? mockSystemStatus.running,
+    agents,
+    config: {
+      shopify:  data.config?.shopify  ?? false,
+      printful: data.config?.printful ?? false,
+      openai:   data.config?.openai   ?? false,
+    },
+    deadMansSwitch: {
+      isPaused:       dms.is_paused       ?? dms.isPaused       ?? false,
+      lastCheckin:    dms.last_checkin    ?? dms.lastCheckin    ?? new Date().toISOString(),
+      timeUntilPause: dms.time_until_pause ?? dms.timeUntilPause ?? 82800,
+    },
+  };
+}
+
 function App() {
-  const [status] = useState<SystemStatus>(mockSystemStatus);
-  const [analytics] = useState<Analytics>(mockAnalytics);
+  const [status, setStatus] = useState<SystemStatus>(mockSystemStatus);
+  const [analytics, setAnalytics] = useState<Analytics>(mockAnalytics);
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [apiConnected, setApiConnected] = useState(true);
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      // Poll /api/status
-    }, 5000);
+    const fetchData = async () => {
+      try {
+        const [statusRes, analyticsRes] = await Promise.all([
+          fetch('/api/status'),
+          fetch('/api/analytics'),
+        ]);
+        if (statusRes.ok) {
+          const data = await statusRes.json();
+          setStatus(mapApiStatus(data));
+          setApiConnected(true);
+        } else {
+          setApiConnected(false);
+        }
+        if (analyticsRes.ok) {
+          const data = await analyticsRes.json();
+          // Merge live analytics (today / week keys) over mock structure
+          setAnalytics(prev => ({
+            today: { ...prev.today, ...(data.today ?? {}) },
+            week:  { ...prev.week,  ...(data.week  ?? {}) },
+          }));
+        }
+      } catch {
+        setApiConnected(false);
+      }
+    };
+    fetchData();
+    const interval = setInterval(fetchData, 5000);
     return () => clearInterval(interval);
   }, []);
 
@@ -484,6 +537,16 @@ function App() {
           </div>
         </div>
       </header>
+
+      {/* Backend status banner */}
+      {!apiConnected && (
+        <div className="bg-red-50 border-b border-red-200 px-4 py-2">
+          <div className="container mx-auto flex items-center gap-2 text-red-700 text-sm">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            Backend API is unreachable — showing last known data. Start the Python server to connect.
+          </div>
+        </div>
+      )}
 
       {/* Main Content */}
       <main className="container mx-auto px-4 py-6">

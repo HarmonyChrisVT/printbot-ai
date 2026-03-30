@@ -8,7 +8,11 @@ import signal
 import sys
 from datetime import datetime
 from pathlib import Path
+from typing import Dict, List
 import json
+
+from dotenv import load_dotenv
+load_dotenv()
 
 from config.settings import config, load_config_from_env
 from database.models import init_database, get_session, SystemEvent
@@ -299,6 +303,7 @@ class OverrideRequest(BaseModel):
 async def startup():
     global orchestrator
     orchestrator = PrintBotOrchestratorV2()
+    asyncio.create_task(orchestrator.start())
 
 
 @app.get("/api/health")
