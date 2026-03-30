@@ -20,6 +20,15 @@ from config.settings import config
 from database.models import Design, Product, TrendData, AgentLog, get_session
 from integrations.shopify import ShopifyAPI
 
+# Use async client so DALL-E calls don't block the event loop
+_async_openai_client: Optional[openai.AsyncOpenAI] = None
+
+def _get_openai_client() -> openai.AsyncOpenAI:
+    global _async_openai_client
+    if _async_openai_client is None:
+        _async_openai_client = openai.AsyncOpenAI(api_key=config.openai.api_key)
+    return _async_openai_client
+
 
 class TrendScanner:
     """Scans multiple sources for trending topics"""
@@ -167,20 +176,24 @@ class TrendScanner:
 
 class DesignGenerator:
     """Generates AI designs using DALL-E"""
-    
+
     def __init__(self):
-        self.client = openai.OpenAI(api_key=config.openai.api_key)
         self.output_dir = Path("./data/designs")
         self.output_dir.mkdir(parents=True, exist_ok=True)
-    
+
     async def generate_design(self, trend: Dict) -> Optional[Design]:
         """Generate a design based on trend data"""
         try:
             # Create optimized prompt
             prompt = self._create_prompt(trend)
-            
-            # Generate image with DALL-E
-            response = self.client.images.generate(
+
+            if not config.openai.is_configured:
+                print("⚠️  OpenAI not configured — skipping design generation")
+                return None
+
+            # Generate image with DALL-E (async — does not block the event loop)
+            client = _get_openai_client()
+            response = await client.images.generate(
                 model=config.openai.image_model,
                 prompt=prompt,
                 size=config.design.image_size,
@@ -326,13 +339,25 @@ class DesignAgent:
             # Save to database
             self.session.add(design)
             self.session.commit()
-            
+
             print(f"✅ Design created: ID {design.id}")
-            
+
+            # Record the trend as used so _filter_unused_trends skips it next cycle
+            trend_record = TrendData(
+                keyword=top_trend['keyword'],
+                source=top_trend['source'],
+                category=top_trend.get('category', 'general'),
+                trend_score=top_trend.get('trend_score', 50),
+                design_created=True,
+                design_id=design.id,
+            )
+            self.session.add(trend_record)
+            self.session.commit()
+
             # Auto-approve if enabled and confidence is high enough
             if config.design.auto_approve and design.ai_confidence >= config.design.approval_threshold:
                 await self._approve_design(design)
-            
+
             # Log success
             self._log_action("design_created", "success", {
                 "design_id": design.id,
@@ -385,13 +410,16 @@ class DesignAgent:
             keyword = (design.trend_keywords or ["Custom Design"])[0]
             title = f"{keyword.title()} - Graphic Tee"
 
+            # Shopify requires tags as a comma-separated STRING, not a list
+            tags_str = ", ".join(design.trend_keywords or [])
+
             shopify = ShopifyAPI()
             product_data = {
                 'title': title,
-                'description': f'<p>Unique AI-generated design inspired by current trends. '
-                               f'Perfect for gifting or personal use.</p>',
+                'description': '<p>Unique AI-generated design inspired by current trends. '
+                               'Perfect for gifting or personal use.</p>',
                 'product_type': 't-shirt',
-                'tags': design.trend_keywords or [],
+                'tags': tags_str,
                 'image_urls': [design.image_url] if design.image_url else [],
                 'variants': [
                     {'size': 'S',  'price': 24.99, 'sku': f'PBOT-{design.id}-S'},

@@ -131,6 +131,7 @@ class Order(Base):
     printful_status = Column(String(50))
     tracking_number = Column(String(100))
     tracking_url = Column(String(500))
+    tracking_status = Column(String(50), default='pending')
     
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -211,6 +212,9 @@ class SocialPost(Base):
     # External IDs
     external_post_id = Column(String(100))
     external_url = Column(String(500))
+
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow)
 
 
 class CompetitorPrice(Base):

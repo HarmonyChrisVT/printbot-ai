@@ -124,26 +124,38 @@ class ShopifyAPI:
         """Create a new product"""
         endpoint = '/products.json'
         
+        variants = product_data.get('variants', [{}])
+        # Preserve order for size options; deduplicate while keeping insertion order
+        seen_sizes = []
+        for v in variants:
+            s = v.get('size', 'Default')
+            if s not in seen_sizes:
+                seen_sizes.append(s)
+
+        # Shopify requires tags as a comma-separated string, not a list
+        raw_tags = product_data.get('tags', '')
+        if isinstance(raw_tags, list):
+            raw_tags = ', '.join(raw_tags)
+
         data = {
             'product': {
                 'title': product_data.get('title'),
                 'body_html': product_data.get('description'),
                 'vendor': product_data.get('vendor', 'PrintBot AI'),
                 'product_type': product_data.get('product_type'),
-                'tags': product_data.get('tags', []),
+                'tags': raw_tags,
                 'variants': [
                     {
                         'option1': variant.get('size', 'Default'),
                         'price': str(variant.get('price', 0)),
                         'sku': variant.get('sku'),
-                        'inventory_quantity': variant.get('inventory', 100)
                     }
-                    for variant in product_data.get('variants', [{}])
+                    for variant in variants
                 ],
                 'options': [
                     {
                         'name': 'Size',
-                        'values': list(set(v.get('size', 'Default') for v in product_data.get('variants', [{}])))
+                        'values': seen_sizes,
                     }
                 ],
                 'images': [
