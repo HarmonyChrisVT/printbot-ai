@@ -20,7 +20,10 @@ import {
   BarChart2,
   MessageSquare,
   Users,
-  Heart
+  Heart,
+  ShoppingCart,
+  Megaphone,
+  Star
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -135,6 +138,24 @@ const mockSystemStatus: SystemStatus = {
       running: true,
       lastActivity: '10 minutes ago',
       stats: { emailsSent: 45, openRate: 38, campaignsActive: 2 }
+    },
+    conversion: {
+      name: 'Conversion Agent',
+      running: true,
+      lastActivity: '12 minutes ago',
+      stats: { cartsRecovered: 3, emailsSent: 7, avgDiscount: 15 }
+    },
+    outreach: {
+      name: 'Outreach Agent',
+      running: true,
+      lastActivity: '2 hours ago',
+      stats: { postsEngaged: 8, subredditsMonitored: 10, leadsGenerated: 4 }
+    },
+    influencer: {
+      name: 'Influencer Agent',
+      running: true,
+      lastActivity: '4 hours ago',
+      stats: { total_identified: 24, queued: 18, contacted: 6, responded: 2, converted: 1 }
     }
   },
   config: {
@@ -438,6 +459,39 @@ const agentConfig: Record<string, {
       { label: 'Open Rate', value: '38%' },
       { label: 'Active Campaigns', value: '2 running' },
       { label: 'Unsubscribe Rate', value: '0.4%' },
+    ],
+  },
+  conversion: {
+    icon: ShoppingCart,
+    color: 'bg-gradient-to-br from-orange-600 to-red-500',
+    description: 'Recovers abandoned carts with escalating discounts (10% → 15% → 20%)',
+    details: [
+      { label: '1hr Trigger', value: '10% off code' },
+      { label: '24hr Trigger', value: '15% off code' },
+      { label: '72hr Trigger', value: '20% off — final' },
+      { label: 'Check Interval', value: 'Every 15 min' },
+    ],
+  },
+  outreach: {
+    icon: Megaphone,
+    color: 'bg-gradient-to-br from-cyan-600 to-blue-600',
+    description: 'Finds buying-intent posts on Reddit & forums and engages naturally',
+    details: [
+      { label: 'Subreddits', value: '10 monitored' },
+      { label: 'Intent Keywords', value: '18 tracked' },
+      { label: 'Max / Cycle', value: '8 engagements' },
+      { label: 'Cooldown', value: 'Every 3 hours' },
+    ],
+  },
+  influencer: {
+    icon: Star,
+    color: 'bg-gradient-to-br from-yellow-500 to-amber-600',
+    description: 'Identifies micro-influencers (1K–100K) and queues collab DMs',
+    details: [
+      { label: 'Follower Range', value: '1K – 100K' },
+      { label: 'Min Engagement', value: '2%' },
+      { label: 'Offer', value: 'Free product' },
+      { label: 'Hashtags Scanned', value: '18 niches' },
     ],
   },
 };

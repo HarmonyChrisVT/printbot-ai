@@ -24,6 +24,9 @@ from agents.content_writer_agent import ContentWriterAgent
 from agents.customer_engagement_agent import CustomerEngagementAgent
 from agents.customer_service_chatbot import CustomerServiceChatbot
 from agents.inventory_prediction_agent import InventoryPredictionAgent
+from agents.conversion_agent import ConversionAgent
+from agents.outreach_agent import OutreachAgent
+from agents.influencer_agent import InfluencerAgent
 
 
 class DeadMansSwitch:
@@ -154,6 +157,9 @@ class PrintBotOrchestrator:
         self.customer_engagement_agent = CustomerEngagementAgent(self.session)
         self.customer_service_chatbot = CustomerServiceChatbot(self.session)
         self.inventory_prediction_agent = InventoryPredictionAgent(self.session)
+        self.conversion_agent = ConversionAgent(self.session)
+        self.outreach_agent = OutreachAgent(self.session)
+        self.influencer_agent = InfluencerAgent(self.session)
         
         # Initialize systems
         self.dead_mans_switch = DeadMansSwitch(
@@ -196,6 +202,9 @@ class PrintBotOrchestrator:
             asyncio.create_task(self.customer_engagement_agent.run()),
             asyncio.create_task(self.customer_service_chatbot.run()),
             asyncio.create_task(self.inventory_prediction_agent.run()),
+            asyncio.create_task(self.conversion_agent.run()),
+            asyncio.create_task(self.outreach_agent.run()),
+            asyncio.create_task(self.influencer_agent.run()),
             asyncio.create_task(self._monitoring_loop()),
         ]
         
@@ -232,6 +241,9 @@ class PrintBotOrchestrator:
         self.customer_engagement_agent.stop()
         self.customer_service_chatbot.stop()
         self.inventory_prediction_agent.stop()
+        self.conversion_agent.stop()
+        self.outreach_agent.stop()
+        self.influencer_agent.stop()
         
         # Cancel tasks
         for task in self.agent_tasks:
@@ -387,6 +399,31 @@ class PrintBotOrchestrator:
                     'name': 'Customer Engagement Agent', 'running': self.customer_engagement_agent.running,
                     'lastActivity': last_activity_str('customer_engagement'),
                     'stats': {'emailsSent': 0, 'openRate': 0, 'campaignsActive': 0}
+                },
+                'conversion': {
+                    'name': 'Conversion Agent', 'running': self.conversion_agent.running,
+                    'lastActivity': last_activity_str('conversion'),
+                    'stats': {
+                        'cartsRecovered': 0,
+                        'emailsSent': 0,
+                        'avgDiscount': 15,
+                    }
+                },
+                'outreach': {
+                    'name': 'Outreach Agent', 'running': self.outreach_agent.running,
+                    'lastActivity': last_activity_str('outreach'),
+                    'stats': {
+                        'postsEngaged': 0,
+                        'subredditsMonitored': 10,
+                        'leadsGenerated': 0,
+                    }
+                },
+                'influencer': {
+                    'name': 'Influencer Agent', 'running': self.influencer_agent.running,
+                    'lastActivity': last_activity_str('influencer'),
+                    'stats': {
+                        **self.influencer_agent.get_pipeline_stats(),
+                    }
                 },
             },
             'config': {
