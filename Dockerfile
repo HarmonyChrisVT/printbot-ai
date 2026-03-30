@@ -2,29 +2,33 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
+# Minimal system deps — no nginx needed (FastAPI serves the React app directly)
 RUN apt-get update && apt-get install -y \
     gcc \
     curl \
-    nginx \
-    gettext-base \
     && rm -rf /var/lib/apt/lists/*
 
+# Python dependencies
 COPY python/requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Application code
 COPY python/ ./python/
-COPY dist/ /usr/share/nginx/html
-COPY docker/nginx.conf /etc/nginx/conf.d/default.conf.template
-COPY docker/start.sh ./start.sh
-RUN chmod +x ./start.sh
 
-RUN mkdir -p /app/data /app/logs
+# Pre-built React dashboard (already in dist/ — no Node.js build needed)
+COPY dist/ /app/dist/
 
-ENV PYTHONPATH=/app/python:/app
+# Persistent data directories
+RUN mkdir -p /app/data/designs /app/data/backups /app/logs
+
+ENV PYTHONPATH=/app/python
 ENV DATABASE_PATH=/app/data/printbot.db
 ENV LOG_LEVEL=INFO
-ENV PORT=8080
 
+# Railway sets $PORT dynamically — uvicorn picks it up via the CMD
 EXPOSE 8080
 
-CMD ["./start.sh"]
+HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
+    CMD curl -f http://localhost:${PORT:-8080}/api/health || exit 1
+
+CMD sh -c "cd /app/python && uvicorn main_v2:app --host 0.0.0.0 --port ${PORT:-8080}"

@@ -681,14 +681,24 @@ async def trigger_design():
     }
 
 
+# ── Serve the pre-built React dashboard ──────────────────────────────────────
+# Must come AFTER all /api/* routes so FastAPI handles those first.
+# Railway deploys with dist/ at /app/dist/ (see Dockerfile).
+from pathlib import Path as _Path
+from fastapi.staticfiles import StaticFiles as _StaticFiles
+
+_dist_dir = _Path(__file__).parent.parent / "dist"
+if _dist_dir.is_dir():
+    app.mount("/", _StaticFiles(directory=str(_dist_dir), html=True), name="static")
+else:
+    print(f"⚠️  React dist/ not found at {_dist_dir} — dashboard will not be served")
+
+
 def main():
-    """Main entry point"""
-    orchestrator = PrintBotOrchestratorV2()
-    
-    try:
-        asyncio.run(orchestrator.start())
-    except KeyboardInterrupt:
-        print("\n👋 Goodbye!")
+    """Local dev entry point — in production uvicorn is invoked directly via CMD."""
+    import uvicorn
+    port = int(__import__("os").getenv("PORT", "8080"))
+    uvicorn.run("main_v2:app", host="0.0.0.0", port=port, reload=False)
 
 
 if __name__ == "__main__":

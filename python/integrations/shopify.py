@@ -27,82 +27,43 @@ class ShopifyAPI:
     async def _request(self, method: str, endpoint: str, data: Dict = None) -> Optional[Dict]:
         """Make API request"""
         url = f"{self.base_url}{endpoint}"
-        timeout = aiohttp.ClientTimeout(total=30)
-
-        async with aiohttp.ClientSession(headers=self.headers, timeout=timeout) as session:
+        
+        async with aiohttp.ClientSession(headers=self.headers) as session:
             try:
                 if method == 'GET':
-                    async with session.get(url) as response:
+                    async with session.get(url, timeout=30) as response:
                         if response.status == 200:
                             return await response.json()
                         else:
-                            text = await response.text()
-                            print(f"❌ Shopify API error: {response.status} - {text[:200]}")
+                            body = await response.text()
+                            print(f"❌ Shopify API error {response.status} on {endpoint}: {body[:200]}")
                             return None
 
                 elif method == 'POST':
-                    async with session.post(url, json=data) as response:
+                    async with session.post(url, json=data, timeout=30) as response:
                         if response.status in [200, 201]:
                             return await response.json()
                         else:
-                            text = await response.text()
-                            print(f"❌ Shopify API error: {response.status} - {text[:200]}")
+                            body = await response.text()
+                            print(f"❌ Shopify API error {response.status} on {endpoint}: {body[:200]}")
                             return None
 
                 elif method == 'PUT':
-                    async with session.put(url, json=data) as response:
+                    async with session.put(url, json=data, timeout=30) as response:
                         if response.status == 200:
                             return await response.json()
                         else:
-                            text = await response.text()
-                            print(f"❌ Shopify API error: {response.status} - {text[:200]}")
+                            body = await response.text()
+                            print(f"❌ Shopify API error {response.status} on {endpoint}: {body[:200]}")
                             return None
-
+                
                 elif method == 'DELETE':
-                    async with session.delete(url) as response:
+                    async with session.delete(url, timeout=30) as response:
                         return response.status == 200
-
+                        
             except Exception as e:
                 print(f"❌ Shopify request error: {e}")
                 return None
-
-    async def verify_scopes(self) -> Dict:
-        """Verify the access token has all required scopes"""
-        url = f"https://{self.shop_url}/admin/oauth/access_scopes.json"
-        timeout = aiohttp.ClientTimeout(total=30)
-
-        async with aiohttp.ClientSession(headers=self.headers, timeout=timeout) as session:
-            try:
-                async with session.get(url) as response:
-                    if response.status == 200:
-                        data = await response.json()
-                        granted = {s['handle'] for s in data.get('access_scopes', [])}
-                        required = set(config.shopify.required_scopes)
-                        missing = required - granted
-                        return {
-                            'granted': list(granted),
-                            'required': list(required),
-                            'missing': list(missing),
-                            'ok': len(missing) == 0
-                        }
-                    else:
-                        return {'ok': False, 'error': f"HTTP {response.status}"}
-            except Exception as e:
-                return {'ok': False, 'error': str(e)}
-
-    async def get_locations(self) -> List[Dict]:
-        """Get store locations"""
-        endpoint = '/locations.json'
-        response = await self._request('GET', endpoint)
-        return response.get('locations', []) if response else []
-
-    async def get_primary_location_id(self) -> Optional[str]:
-        """Get the primary/first active location ID"""
-        locations = await self.get_locations()
-        for loc in locations:
-            if loc.get('active'):
-                return str(loc['id'])
-        return str(locations[0]['id']) if locations else None
     
     # Products
     async def get_products(self, limit: int = 50, page_info: str = None) -> List[Dict]:
@@ -124,38 +85,26 @@ class ShopifyAPI:
         """Create a new product"""
         endpoint = '/products.json'
         
-        variants = product_data.get('variants', [{}])
-        # Preserve order for size options; deduplicate while keeping insertion order
-        seen_sizes = []
-        for v in variants:
-            s = v.get('size', 'Default')
-            if s not in seen_sizes:
-                seen_sizes.append(s)
-
-        # Shopify requires tags as a comma-separated string, not a list
-        raw_tags = product_data.get('tags', '')
-        if isinstance(raw_tags, list):
-            raw_tags = ', '.join(raw_tags)
-
         data = {
             'product': {
                 'title': product_data.get('title'),
                 'body_html': product_data.get('description'),
                 'vendor': product_data.get('vendor', 'PrintBot AI'),
                 'product_type': product_data.get('product_type'),
-                'tags': raw_tags,
+                'tags': product_data.get('tags', []),
                 'variants': [
                     {
                         'option1': variant.get('size', 'Default'),
                         'price': str(variant.get('price', 0)),
                         'sku': variant.get('sku'),
+                        'inventory_quantity': variant.get('inventory', 100)
                     }
-                    for variant in variants
+                    for variant in product_data.get('variants', [{}])
                 ],
                 'options': [
                     {
                         'name': 'Size',
-                        'values': seen_sizes,
+                        'values': list(set(v.get('size', 'Default') for v in product_data.get('variants', [{}])))
                     }
                 ],
                 'images': [
@@ -222,44 +171,19 @@ class ShopifyAPI:
         return response.get('order') if response else None
     
     async def fulfill_order(self, order_id: str, tracking_number: str = None, tracking_url: str = None) -> Optional[Dict]:
-        """Mark order as fulfilled using the fulfillment_orders API (post-2022-04)"""
-        # Step 1: get fulfillment orders for this order
-        fo_response = await self._request('GET', f'/orders/{order_id}/fulfillment_orders.json')
-        if not fo_response:
-            return None
-
-        fulfillment_orders = fo_response.get('fulfillment_orders', [])
-        open_fos = [fo for fo in fulfillment_orders if fo.get('status') == 'open']
-        if not open_fos:
-            print(f"⚠️ No open fulfillment orders for order {order_id}")
-            return None
-
-        # Step 2: resolve location ID
-        location_id = await self.get_primary_location_id()
-
-        # Step 3: create fulfillment via fulfillment_orders endpoint
-        line_items_by_fo = [
-            {'fulfillment_order_id': fo['id']}
-            for fo in open_fos
-        ]
-
-        data: Dict = {
+        """Mark order as fulfilled"""
+        endpoint = f'/orders/{order_id}/fulfillments.json'
+        
+        data = {
             'fulfillment': {
-                'line_items_by_fulfillment_order': line_items_by_fo,
+                'location_id': None,  # Use default location
+                'tracking_number': tracking_number,
+                'tracking_urls': [tracking_url] if tracking_url else [],
                 'notify_customer': True
             }
         }
-
-        if tracking_number or tracking_url:
-            data['fulfillment']['tracking_info'] = {
-                'number': tracking_number or '',
-                'url': tracking_url or ''
-            }
-
-        if location_id:
-            data['fulfillment']['location_id'] = int(location_id)
-
-        response = await self._request('POST', '/fulfillments.json', data)
+        
+        response = await self._request('POST', endpoint, data)
         return response.get('fulfillment') if response else None
     
     # Inventory
@@ -288,6 +212,21 @@ class ShopifyAPI:
         endpoint = '/shop.json'
         response = await self._request('GET', endpoint)
         return response.get('shop') if response else None
+
+    async def test_connection(self) -> Dict:
+        """
+        Validate the Custom App access token by hitting /shop.json.
+        Returns dict with 'ok' bool, 'shop_name', and 'message'.
+        """
+        if not self.shop_url or not self.access_token:
+            return {'ok': False, 'shop_name': None, 'message': 'SHOPIFY_SHOP_URL or SHOPIFY_ACCESS_TOKEN not set'}
+        try:
+            shop = await self.get_shop_info()
+            if shop:
+                return {'ok': True, 'shop_name': shop.get('name', 'Unknown'), 'message': 'Connected'}
+            return {'ok': False, 'shop_name': None, 'message': 'Token rejected — check scopes or token value'}
+        except Exception as e:
+            return {'ok': False, 'shop_name': None, 'message': str(e)}
     
     # Webhooks
     async def create_webhook(self, topic: str, address: str) -> Optional[Dict]:

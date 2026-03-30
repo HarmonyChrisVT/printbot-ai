@@ -8,8 +8,11 @@ import signal
 import sys
 from datetime import datetime
 from pathlib import Path
-import json
 from typing import Dict, List
+import json
+
+from dotenv import load_dotenv
+load_dotenv()
 
 from config.settings import config, load_config_from_env
 from database.models import init_database, get_session, SystemEvent
@@ -21,6 +24,13 @@ from agents.social_agent_v2 import SocialAgentV2
 from agents.fulfillment_agent import FulfillmentAgent
 from agents.b2b_agent import B2BAgent
 from agents.customer_engagement_agent import CustomerEngagementAgent
+from agents.competitor_spy_agent import CompetitorSpyAgent
+from agents.affiliate_agent import AffiliateAgent
+from agents.content_writer_agent import ContentWriterAgent
+from agents.customer_service_chatbot import CustomerServiceChatbot
+from agents.inventory_prediction_agent import InventoryPredictionAgent
+from agents.master_orchestrator import MasterOrchestrator
+from agents.intelligence_bus import bus as intelligence_bus
 
 from integrations.fulfillment_providers import FulfillmentProviderChain
 from utils.protection_system import ProtectionSystem
@@ -51,15 +61,23 @@ class PrintBotOrchestratorV2:
         # Initialize fulfillment provider chain
         self.fulfillment_chain = FulfillmentProviderChain(self.session)
         
-        # Initialize all 6 agents
+        # Initialize all 11 agents
         self.agents = {
-            'design': DesignAgent(self.session),
-            'pricing': PricingAgent(self.session),
-            'social': SocialAgentV2(self.session),
-            'fulfillment': FulfillmentAgent(self.session),
-            'b2b': B2BAgent(self.session),
-            'engagement': CustomerEngagementAgent(self.session)
+            'design':               DesignAgent(self.session),
+            'pricing':              PricingAgent(self.session),
+            'social':               SocialAgentV2(self.session),
+            'fulfillment':          FulfillmentAgent(self.session),
+            'b2b':                  B2BAgent(self.session),
+            'customer_engagement':  CustomerEngagementAgent(self.session),
+            'competitor_spy':       CompetitorSpyAgent(self.session),
+            'affiliate':            AffiliateAgent(self.session),
+            'content_writer':       ContentWriterAgent(self.session),
+            'customer_service':     CustomerServiceChatbot(self.session),
+            'inventory_prediction': InventoryPredictionAgent(self.session),
         }
+
+        # Master Orchestrator — boss above all agents
+        self.master_orchestrator = MasterOrchestrator(self.session, self.agents)
         
         # State
         self.running = False
@@ -83,7 +101,10 @@ class PrintBotOrchestratorV2:
         
         # Check configuration
         self._check_configuration()
-        
+
+        # Live Shopify connection test
+        await self._check_shopify_connection()
+
         # Initialize protection systems
         await self.protection.initialize()
         
@@ -91,19 +112,24 @@ class PrintBotOrchestratorV2:
         await self._check_fulfillment_providers()
         
         # Create agent tasks
-        print("\n📋 Starting agents...")
+        print("\n📋 Starting Master Orchestrator + all 11 agents...")
         self.agent_tasks = [
-            asyncio.create_task(self.agents['design'].run(), name='design'),
-            asyncio.create_task(self.agents['pricing'].run(), name='pricing'),
-            asyncio.create_task(self.agents['social'].run(), name='social'),
-            asyncio.create_task(self.agents['fulfillment'].run(), name='fulfillment'),
-            asyncio.create_task(self.agents['b2b'].run(), name='b2b'),
-            asyncio.create_task(self.agents['engagement'].run(), name='engagement'),
-            asyncio.create_task(self._monitoring_loop(), name='monitoring'),
-            asyncio.create_task(self._profit_analysis_loop(), name='profit_analysis'),
+            # Master Orchestrator starts first — sets the mode before agents run
+            asyncio.create_task(self.master_orchestrator.run(), name='master_orchestrator'),
+            asyncio.create_task(self.agents['design'].run(),               name='design'),
+            asyncio.create_task(self.agents['pricing'].run(),              name='pricing'),
+            asyncio.create_task(self.agents['social'].run(),               name='social'),
+            asyncio.create_task(self.agents['fulfillment'].run(),          name='fulfillment'),
+            asyncio.create_task(self.agents['b2b'].run(),                  name='b2b'),
+            asyncio.create_task(self.agents['customer_engagement'].run(),  name='customer_engagement'),
+            asyncio.create_task(self.agents['competitor_spy'].run(),       name='competitor_spy'),
+            asyncio.create_task(self.agents['affiliate'].run(),            name='affiliate'),
+            asyncio.create_task(self.agents['inventory_prediction'].run(), name='inventory_prediction'),
+            asyncio.create_task(self._monitoring_loop(),                   name='monitoring'),
+            asyncio.create_task(self._profit_analysis_loop(),              name='profit_analysis'),
         ]
-        
-        print("\n✅ All 6 agents started successfully!")
+
+        print("\n✅ Master Orchestrator + 11 agents started successfully!")
         print("📊 Dashboard available at http://localhost:8080")
         print("🔌 API available at http://localhost:8000")
         print("\nPress Ctrl+C to stop\n")
@@ -118,7 +144,9 @@ class PrintBotOrchestratorV2:
         """Stop all agents"""
         print("\n🛑 Stopping all agents...")
         self.running = False
-        
+
+        self.master_orchestrator.stop()
+
         # Stop each agent
         for name, agent in self.agents.items():
             print(f"   Stopping {name}...")
@@ -161,7 +189,20 @@ class PrintBotOrchestratorV2:
         print(f"   TikTok: {tt_count} accounts")
         
         print("-" * 40)
-    
+
+    async def _check_shopify_connection(self):
+        """Live Shopify connection test using Custom App token"""
+        if not config.shopify.is_configured:
+            print("⚠️  Shopify: Not configured — set SHOPIFY_SHOP_URL and SHOPIFY_ACCESS_TOKEN")
+            return
+        from integrations.shopify import ShopifyAPI
+        result = await ShopifyAPI().test_connection()
+        if result['ok']:
+            print(f"✅ Shopify: Connected (Shop: {result['shop_name']})")
+        else:
+            print(f"❌ Shopify: Connection failed — {result['message']}")
+            print("   → Check SHOPIFY_SETUP.md for instructions")
+
     async def _check_fulfillment_providers(self):
         """Check health of all fulfillment providers"""
         print("\n🏥 Checking fulfillment provider health...")
@@ -288,6 +329,9 @@ app.add_middleware(
 # Global orchestrator instance
 orchestrator = None
 
+# Credentials saved via the dashboard are persisted here so they survive restarts
+CONFIG_RUNTIME_FILE = "/app/data/.env.runtime"
+
 
 class OverrideRequest(BaseModel):
     agent_name: str
@@ -296,16 +340,60 @@ class OverrideRequest(BaseModel):
     reason: str
 
 
+class ConfigRequest(BaseModel):
+    shopify_shop_url: str = ""
+    shopify_access_token: str = ""
+    openai_api_key: str = ""
+    printful_api_key: str = ""
+    design_auto_approve: bool = False
+
+
+def _persist_config():
+    """Write current credentials to a runtime file so they reload on next startup."""
+    import os as _os
+    try:
+        _os.makedirs("/app/data", exist_ok=True)
+        lines = []
+        for key, val in [
+            ("SHOPIFY_SHOP_URL",     config.shopify.shop_url),
+            ("SHOPIFY_ACCESS_TOKEN", config.shopify.access_token),
+            ("OPENAI_API_KEY",       config.openai.api_key),
+            ("PRINTFUL_API_KEY",     config.printful.api_key),
+            ("DESIGN_AUTO_APPROVE",  str(config.design.auto_approve).lower()),
+        ]:
+            if val:
+                lines.append(f"{key}={val}\n")
+        with open(CONFIG_RUNTIME_FILE, "w") as fh:
+            fh.writelines(lines)
+    except Exception as e:
+        print(f"⚠️  Could not persist config: {e}")
+
+
 @app.on_event("startup")
 async def startup():
     global orchestrator
+    # Load previously saved runtime credentials before initialising the orchestrator
+    import os as _os
+    if _os.path.exists(CONFIG_RUNTIME_FILE):
+        from dotenv import load_dotenv as _ld
+        _ld(CONFIG_RUNTIME_FILE, override=True)
+        print(f"✅ Loaded saved credentials from {CONFIG_RUNTIME_FILE}")
     orchestrator = PrintBotOrchestratorV2()
+    asyncio.create_task(orchestrator.start())
 
 
 @app.get("/api/health")
 async def health_check():
     """Health check endpoint"""
     return {"status": "healthy", "version": "2.0.0"}
+
+
+@app.get("/api/orchestrator")
+async def get_orchestrator():
+    """Get Master Orchestrator status — mode, strategy, agent priorities, intelligence flows"""
+    if orchestrator:
+        return orchestrator.master_orchestrator.get_status()
+    return {"error": "System not initialized"}
 
 
 @app.get("/api/status")
@@ -419,14 +507,198 @@ async def get_profit_analytics():
     }
 
 
+@app.get("/api/config/status")
+async def get_config_status():
+    """Returns which fields are configured (booleans only — values never exposed)."""
+    return {
+        "shopify_shop_url":       bool(config.shopify.shop_url),
+        "shopify_access_token":   bool(config.shopify.access_token),
+        "openai_api_key":         bool(config.openai.api_key),
+        "printful_api_key":       bool(config.printful.api_key),
+        "design_auto_approve":    config.design.auto_approve,
+    }
+
+
+@app.post("/api/config")
+async def save_config_endpoint(request: ConfigRequest):
+    """
+    Save credentials entered via the dashboard setup form.
+    Updates the in-memory config immediately and persists to /app/data/.env.runtime
+    so values are re-loaded on the next restart.
+    Returns a live Shopify connection test result.
+    """
+    import os as _os
+
+    if request.shopify_shop_url:
+        # Strip https:// — common mistake
+        url = request.shopify_shop_url.strip().rstrip("/")
+        url = url.replace("https://", "").replace("http://", "")
+        config.shopify.shop_url = url
+        _os.environ["SHOPIFY_SHOP_URL"] = url
+
+    if request.shopify_access_token:
+        token = request.shopify_access_token.strip()
+        config.shopify.access_token = token
+        _os.environ["SHOPIFY_ACCESS_TOKEN"] = token
+
+    if request.openai_api_key:
+        key = request.openai_api_key.strip()
+        config.openai.api_key = key
+        _os.environ["OPENAI_API_KEY"] = key
+
+    if request.printful_api_key:
+        key = request.printful_api_key.strip()
+        config.printful.api_key = key
+        _os.environ["PRINTFUL_API_KEY"] = key
+
+    config.design.auto_approve = request.design_auto_approve
+
+    _persist_config()
+
+    # Run a live Shopify connection test immediately
+    shopify_test = None
+    if config.shopify.is_configured:
+        from integrations.shopify import ShopifyAPI
+        shopify_test = await ShopifyAPI().test_connection()
+
+    return {"status": "saved", "shopify_test": shopify_test}
+
+
+@app.get("/api/test")
+async def run_diagnostics():
+    """
+    Full system diagnostic — call this to see exactly what is and isn't working.
+    Checks: Shopify connection, OpenAI config, auto_approve flag, and DB counts.
+    """
+    results = {}
+
+    # 1. Shopify live connection test
+    from integrations.shopify import ShopifyAPI
+    shopify_result = await ShopifyAPI().test_connection()
+    results["shopify"] = shopify_result
+
+    # 2. OpenAI configured
+    results["openai"] = {
+        "configured": config.openai.is_configured,
+        "model": config.openai.model,
+        "image_model": config.openai.image_model,
+    }
+
+    # 3. Design auto-approve — THIS is why products don't appear without it
+    results["design_pipeline"] = {
+        "auto_approve": config.design.auto_approve,
+        "approval_threshold": config.design.approval_threshold,
+        "max_daily_designs": config.design.max_daily_designs,
+        "warning": (
+            None if config.design.auto_approve
+            else "DESIGN_AUTO_APPROVE is false — designs are generated but never approved, "
+                 "so NO products will ever reach Shopify. Set DESIGN_AUTO_APPROVE=true in your .env."
+        ),
+    }
+
+    # 4. Database counts
+    if orchestrator:
+        session = orchestrator.session
+        from database.models import Design, Product
+        from datetime import date
+        today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+
+        designs_total    = session.query(Design).count()
+        designs_pending  = session.query(Design).filter(Design.status == "pending").count()
+        designs_approved = session.query(Design).filter(Design.status == "approved").count()
+        designs_today    = session.query(Design).filter(Design.created_at >= today_start).count()
+        products_total   = session.query(Product).count()
+        products_shopify = session.query(Product).filter(Product.shopify_id.isnot(None)).count()
+
+        results["database"] = {
+            "designs_total":    designs_total,
+            "designs_pending":  designs_pending,
+            "designs_approved": designs_approved,
+            "designs_today":    designs_today,
+            "products_in_db":   products_total,
+            "products_in_shopify": products_shopify,
+        }
+
+        # 5. Recent errors from agent logs
+        from database.models import AgentLog
+        recent_errors = (
+            session.query(AgentLog)
+            .filter(AgentLog.status == "error")
+            .order_by(AgentLog.created_at.desc())
+            .limit(5)
+            .all()
+        )
+        results["recent_errors"] = [
+            {
+                "agent":   e.agent_name,
+                "action":  e.action,
+                "details": e.details,
+                "time":    e.created_at.isoformat() if e.created_at else None,
+            }
+            for e in recent_errors
+        ]
+    else:
+        results["database"] = {"error": "orchestrator not initialized"}
+        results["recent_errors"] = []
+
+    return results
+
+
+@app.post("/api/trigger/design")
+async def trigger_design():
+    """
+    Manually trigger one complete design → approve → Shopify product cycle.
+    Bypasses the 30-minute timer and the auto_approve setting.
+    Use this to test the end-to-end pipeline immediately.
+    """
+    if not orchestrator:
+        raise HTTPException(status_code=503, detail="System not initialized")
+
+    if not config.openai.is_configured:
+        raise HTTPException(status_code=400, detail="OPENAI_API_KEY not set — cannot generate design")
+
+    agent = orchestrator.agents["design"]
+
+    # Run one full cycle in the background so the HTTP response returns immediately
+    async def _run():
+        try:
+            # Temporarily force auto_approve on for this manual trigger
+            original = config.design.auto_approve
+            config.design.auto_approve = True
+            await agent._process_cycle()
+            config.design.auto_approve = original
+        except Exception as e:
+            print(f"❌ Manual design trigger error: {e}")
+
+    asyncio.create_task(_run())
+
+    return {
+        "status": "triggered",
+        "message": (
+            "Design cycle started in background. "
+            "Check /api/test in ~60 seconds to see if a product was created in Shopify."
+        ),
+    }
+
+
+# ── Serve the pre-built React dashboard ──────────────────────────────────────
+# Must come AFTER all /api/* routes so FastAPI handles those first.
+# Railway deploys with dist/ at /app/dist/ (see Dockerfile).
+from pathlib import Path as _Path
+from fastapi.staticfiles import StaticFiles as _StaticFiles
+
+_dist_dir = _Path(__file__).parent.parent / "dist"
+if _dist_dir.is_dir():
+    app.mount("/", _StaticFiles(directory=str(_dist_dir), html=True), name="static")
+else:
+    print(f"⚠️  React dist/ not found at {_dist_dir} — dashboard will not be served")
+
+
 def main():
-    """Main entry point"""
-    orchestrator = PrintBotOrchestratorV2()
-    
-    try:
-        asyncio.run(orchestrator.start())
-    except KeyboardInterrupt:
-        print("\n👋 Goodbye!")
+    """Local dev entry point — in production uvicorn is invoked directly via CMD."""
+    import uvicorn
+    port = int(__import__("os").getenv("PORT", "8080"))
+    uvicorn.run("main_v2:app", host="0.0.0.0", port=port, reload=False)
 
 
 if __name__ == "__main__":

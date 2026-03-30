@@ -17,17 +17,7 @@ import re
 from pathlib import Path
 
 from config.settings import config
-from database.models import Design, Product, TrendData, AgentLog, get_session
-from integrations.shopify import ShopifyAPI
-
-# Use async client so DALL-E calls don't block the event loop
-_async_openai_client: Optional[openai.AsyncOpenAI] = None
-
-def _get_openai_client() -> openai.AsyncOpenAI:
-    global _async_openai_client
-    if _async_openai_client is None:
-        _async_openai_client = openai.AsyncOpenAI(api_key=config.openai.api_key)
-    return _async_openai_client
+from database.models import Design, Product, ProductVariant, TrendData, AgentLog, get_session
 
 
 class TrendScanner:
@@ -68,7 +58,7 @@ class TrendScanner:
         try:
             url = "https://trends.google.com/trends/trendingsearches/daily/rss"
             async with aiohttp.ClientSession() as session:
-                async with session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as response:
+                async with session.get(url, timeout=10) as response:
                     if response.status == 200:
                         content = await response.text()
                         soup = BeautifulSoup(content, 'xml')
@@ -176,24 +166,20 @@ class TrendScanner:
 
 class DesignGenerator:
     """Generates AI designs using DALL-E"""
-
+    
     def __init__(self):
+        self.client = openai.OpenAI(api_key=config.openai.api_key)
         self.output_dir = Path("./data/designs")
         self.output_dir.mkdir(parents=True, exist_ok=True)
-
+    
     async def generate_design(self, trend: Dict) -> Optional[Design]:
         """Generate a design based on trend data"""
         try:
             # Create optimized prompt
             prompt = self._create_prompt(trend)
-
-            if not config.openai.is_configured:
-                print("⚠️  OpenAI not configured — skipping design generation")
-                return None
-
-            # Generate image with DALL-E (async — does not block the event loop)
-            client = _get_openai_client()
-            response = await client.images.generate(
+            
+            # Generate image with DALL-E
+            response = self.client.images.generate(
                 model=config.openai.image_model,
                 prompt=prompt,
                 size=config.design.image_size,
@@ -267,7 +253,7 @@ class DesignGenerator:
             filepath = self.output_dir / filename
             
             async with aiohttp.ClientSession() as session:
-                async with session.get(url, timeout=aiohttp.ClientTimeout(total=30)) as response:
+                async with session.get(url, timeout=30) as response:
                     if response.status == 200:
                         content = await response.read()
                         with open(filepath, 'wb') as f:
@@ -339,25 +325,13 @@ class DesignAgent:
             # Save to database
             self.session.add(design)
             self.session.commit()
-
+            
             print(f"✅ Design created: ID {design.id}")
-
-            # Record the trend as used so _filter_unused_trends skips it next cycle
-            trend_record = TrendData(
-                keyword=top_trend['keyword'],
-                source=top_trend['source'],
-                category=top_trend.get('category', 'general'),
-                trend_score=top_trend.get('trend_score', 50),
-                design_created=True,
-                design_id=design.id,
-            )
-            self.session.add(trend_record)
-            self.session.commit()
-
+            
             # Auto-approve if enabled and confidence is high enough
             if config.design.auto_approve and design.ai_confidence >= config.design.approval_threshold:
                 await self._approve_design(design)
-
+            
             # Log success
             self._log_action("design_created", "success", {
                 "design_id": design.id,
@@ -400,59 +374,79 @@ class DesignAgent:
         self.session.commit()
         print(f"✅ Design {design.id} auto-approved")
 
-        # Create Shopify product if configured
+        # Create Shopify product from approved design
+        await self._create_product_from_design(design)
+
+    async def _create_product_from_design(self, design: Design):
+        """Create a product in Shopify and the local database from an approved design"""
+        from integrations.shopify import ShopifyAPI
+
+        keyword = (design.trend_keywords[0] if design.trend_keywords else 'New Design')
+        title = f"{keyword.title()} - Print on Demand"
+        description = f"<p>Trending design featuring {keyword}. High-quality print-on-demand product available in multiple sizes.</p>"
+        base_price = 24.99
+
+        product_data = {
+            'title': title,
+            'description': description,
+            'product_type': 'T-Shirt',
+            'tags': design.trend_keywords or [],
+            'image_urls': [design.image_url] if design.image_url else [],
+            'variants': [
+                {'size': 'S',  'price': base_price,      'sku': f'SKU-{design.id}-S',  'inventory': 100},
+                {'size': 'M',  'price': base_price,      'sku': f'SKU-{design.id}-M',  'inventory': 100},
+                {'size': 'L',  'price': base_price,      'sku': f'SKU-{design.id}-L',  'inventory': 100},
+                {'size': 'XL', 'price': base_price + 2,  'sku': f'SKU-{design.id}-XL', 'inventory': 100},
+                {'size': '2XL','price': base_price + 2,  'sku': f'SKU-{design.id}-2XL','inventory': 100},
+            ]
+        }
+
+        shopify_product = None
+        shopify_id = None
         if config.shopify.is_configured:
-            await self._create_shopify_product(design)
-
-    async def _create_shopify_product(self, design: Design):
-        """Create a Shopify product from an approved design"""
-        try:
-            keyword = (design.trend_keywords or ["Custom Design"])[0]
-            title = f"{keyword.title()} - Graphic Tee"
-
-            # Shopify requires tags as a comma-separated STRING, not a list
-            tags_str = ", ".join(design.trend_keywords or [])
-
             shopify = ShopifyAPI()
-            product_data = {
-                'title': title,
-                'description': '<p>Unique AI-generated design inspired by current trends. '
-                               'Perfect for gifting or personal use.</p>',
-                'product_type': 't-shirt',
-                'tags': tags_str,
-                'image_urls': [design.image_url] if design.image_url else [],
-                'variants': [
-                    {'size': 'S',  'price': 24.99, 'sku': f'PBOT-{design.id}-S'},
-                    {'size': 'M',  'price': 24.99, 'sku': f'PBOT-{design.id}-M'},
-                    {'size': 'L',  'price': 24.99, 'sku': f'PBOT-{design.id}-L'},
-                    {'size': 'XL', 'price': 24.99, 'sku': f'PBOT-{design.id}-XL'},
-                ]
-            }
+            shopify_product = await shopify.create_product(product_data)
+            shopify_id = str(shopify_product['id']) if shopify_product else None
 
-            result = await shopify.create_product(product_data)
-            if result:
-                product = Product(
-                    shopify_id=str(result['id']),
-                    title=title,
-                    product_type='t-shirt',
-                    design_id=design.id,
-                    design_url=design.image_url,
-                    selling_price=24.99,
-                    is_active=True,
-                    is_approved=True,
-                )
-                self.session.add(product)
-                self.session.commit()
-                print(f"✅ Shopify product created: '{title}' (ID: {result['id']})")
-                self._log_action("product_created", "success", {
-                    "design_id": design.id,
-                    "shopify_id": result['id'],
-                    "title": title,
-                })
-            else:
-                print(f"⚠️  Shopify product creation failed for design {design.id}")
-        except Exception as e:
-            print(f"❌ Error creating Shopify product: {e}")
+        # Save product to local database
+        product = Product(
+            shopify_id=shopify_id,
+            title=title,
+            description=description,
+            product_type='T-Shirt',
+            tags=design.trend_keywords or [],
+            design_id=design.id,
+            design_url=design.image_url,
+            selling_price=base_price,
+            is_active=True,
+            is_approved=True,
+        )
+        self.session.add(product)
+        self.session.flush()  # get product.id
+
+        # Save variants
+        for v in product_data['variants']:
+            variant = ProductVariant(
+                product_id=product.id,
+                size=v['size'],
+                sku=v['sku'],
+                selling_price=v['price'],
+                inventory_quantity=v['inventory'],
+            )
+            self.session.add(variant)
+
+        self.session.commit()
+
+        if shopify_id:
+            print(f"✅ Product '{title}' created in Shopify (ID: {shopify_id})")
+        else:
+            print(f"⚠️  Product '{title}' saved locally (Shopify not configured or request failed)")
+
+        self._log_action("product_created", "success" if shopify_id else "warning", {
+            "design_id": design.id,
+            "title": title,
+            "shopify_id": shopify_id,
+        })
     
     def _log_action(self, action: str, status: str, details: Dict):
         """Log agent action"""

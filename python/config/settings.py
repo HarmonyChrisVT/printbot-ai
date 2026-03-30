@@ -11,23 +11,15 @@ from datetime import timedelta
 
 @dataclass
 class ShopifyConfig:
-    """Shopify API Configuration"""
-    shop_url: str = ""  # your-store.myshopify.com
-    api_key: str = ""   # Admin API key
-    api_secret: str = ""
-    access_token: str = ""
-    api_version: str = "2024-01"
+    """Shopify Custom App Configuration
 
-    # Scopes the access token must have.  When creating or reviewing your
-    # Shopify app/custom token make sure ALL of these are granted.
-    required_scopes: List[str] = field(default_factory=lambda: [
-        "write_products",
-        "read_products",
-        "write_orders",
-        "read_orders",
-        "read_fulfillments",
-        "write_fulfillments",
-    ])
+    Uses a permanent Admin API access token (shpat_...) from a Shopify Custom App.
+    No OAuth flow required — just set SHOPIFY_SHOP_URL and SHOPIFY_ACCESS_TOKEN.
+    See SHOPIFY_SETUP.md for step-by-step instructions.
+    """
+    shop_url: str = ""      # e.g. your-store.myshopify.com
+    access_token: str = ""  # shpat_... token from Custom App
+    api_version: str = "2024-01"
 
     @property
     def is_configured(self) -> bool:
@@ -141,7 +133,9 @@ class DesignConfig:
     image_quality: str = "standard"
     
     # Approval workflow
-    auto_approve: bool = False  # Set to True for full automation
+    # Set DESIGN_AUTO_APPROVE=true in .env to enable full automation.
+    # Without this, designs are generated but never turned into Shopify products.
+    auto_approve: bool = False
     approval_threshold: float = 0.8  # AI confidence threshold
     
     # Product templates
@@ -218,11 +212,9 @@ config = AppConfig()
 
 def load_config_from_env():
     """Load configuration from environment variables"""
-    # Shopify
+    # Shopify (Custom App — only two vars needed)
     config.shopify.shop_url = os.getenv("SHOPIFY_SHOP_URL", "")
     config.shopify.access_token = os.getenv("SHOPIFY_ACCESS_TOKEN", "")
-    config.shopify.api_key = os.getenv("SHOPIFY_API_KEY", "")
-    config.shopify.api_secret = os.getenv("SHOPIFY_API_SECRET", "")
     
     # Printful
     config.printful.api_key = os.getenv("PRINTFUL_API_KEY", "")
@@ -243,18 +235,12 @@ def load_config_from_env():
     config.fulfillment.smtp_password = os.getenv("SMTP_PASSWORD", "")
     config.fulfillment.notification_email = os.getenv("NOTIFICATION_EMAIL", "")
     
-    # Database
-    config.database_path = os.getenv("DATABASE_PATH", config.database_path)
+    # Design auto-approval (REQUIRED for products to appear in Shopify)
+    config.design.auto_approve = os.getenv("DESIGN_AUTO_APPROVE", "false").lower() == "true"
 
     # System
     config.system.emergency_contact = os.getenv("EMERGENCY_CONTACT", "")
     config.system.backup_cloud_token = os.getenv("BACKUP_CLOUD_TOKEN", "")
-
-    # Design
-    config.design.auto_approve = os.getenv("AUTO_APPROVE", "true").lower() == "true"
-    max_daily = os.getenv("MAX_DAILY_DESIGNS")
-    if max_daily:
-        config.design.max_daily_designs = int(max_daily)
 
 
 def load_config_from_file(filepath: str):
