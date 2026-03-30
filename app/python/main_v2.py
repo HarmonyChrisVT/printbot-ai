@@ -24,6 +24,13 @@ from agents.social_agent_v2 import SocialAgentV2
 from agents.fulfillment_agent import FulfillmentAgent
 from agents.b2b_agent import B2BAgent
 from agents.customer_engagement_agent import CustomerEngagementAgent
+from agents.competitor_spy_agent import CompetitorSpyAgent
+from agents.affiliate_agent import AffiliateAgent
+from agents.content_writer_agent import ContentWriterAgent
+from agents.customer_service_chatbot import CustomerServiceChatbot
+from agents.inventory_prediction_agent import InventoryPredictionAgent
+from agents.master_orchestrator import MasterOrchestrator
+from agents.intelligence_bus import bus as intelligence_bus
 
 from integrations.fulfillment_providers import FulfillmentProviderChain
 from utils.protection_system import ProtectionSystem
@@ -54,15 +61,23 @@ class PrintBotOrchestratorV2:
         # Initialize fulfillment provider chain
         self.fulfillment_chain = FulfillmentProviderChain(self.session)
         
-        # Initialize all 6 agents
+        # Initialize all 11 agents
         self.agents = {
-            'design': DesignAgent(self.session),
-            'pricing': PricingAgent(self.session),
-            'social': SocialAgentV2(self.session),
-            'fulfillment': FulfillmentAgent(self.session),
-            'b2b': B2BAgent(self.session),
-            'engagement': CustomerEngagementAgent(self.session)
+            'design':               DesignAgent(self.session),
+            'pricing':              PricingAgent(self.session),
+            'social':               SocialAgentV2(self.session),
+            'fulfillment':          FulfillmentAgent(self.session),
+            'b2b':                  B2BAgent(self.session),
+            'customer_engagement':  CustomerEngagementAgent(self.session),
+            'competitor_spy':       CompetitorSpyAgent(self.session),
+            'affiliate':            AffiliateAgent(self.session),
+            'content_writer':       ContentWriterAgent(self.session),
+            'customer_service':     CustomerServiceChatbot(self.session),
+            'inventory_prediction': InventoryPredictionAgent(self.session),
         }
+
+        # Master Orchestrator — boss above all agents
+        self.master_orchestrator = MasterOrchestrator(self.session, self.agents)
         
         # State
         self.running = False
@@ -94,19 +109,24 @@ class PrintBotOrchestratorV2:
         await self._check_fulfillment_providers()
         
         # Create agent tasks
-        print("\n📋 Starting agents...")
+        print("\n📋 Starting Master Orchestrator + all 11 agents...")
         self.agent_tasks = [
-            asyncio.create_task(self.agents['design'].run(), name='design'),
-            asyncio.create_task(self.agents['pricing'].run(), name='pricing'),
-            asyncio.create_task(self.agents['social'].run(), name='social'),
-            asyncio.create_task(self.agents['fulfillment'].run(), name='fulfillment'),
-            asyncio.create_task(self.agents['b2b'].run(), name='b2b'),
-            asyncio.create_task(self.agents['engagement'].run(), name='engagement'),
-            asyncio.create_task(self._monitoring_loop(), name='monitoring'),
-            asyncio.create_task(self._profit_analysis_loop(), name='profit_analysis'),
+            # Master Orchestrator starts first — sets the mode before agents run
+            asyncio.create_task(self.master_orchestrator.run(), name='master_orchestrator'),
+            asyncio.create_task(self.agents['design'].run(),               name='design'),
+            asyncio.create_task(self.agents['pricing'].run(),              name='pricing'),
+            asyncio.create_task(self.agents['social'].run(),               name='social'),
+            asyncio.create_task(self.agents['fulfillment'].run(),          name='fulfillment'),
+            asyncio.create_task(self.agents['b2b'].run(),                  name='b2b'),
+            asyncio.create_task(self.agents['customer_engagement'].run(),  name='customer_engagement'),
+            asyncio.create_task(self.agents['competitor_spy'].run(),       name='competitor_spy'),
+            asyncio.create_task(self.agents['affiliate'].run(),            name='affiliate'),
+            asyncio.create_task(self.agents['inventory_prediction'].run(), name='inventory_prediction'),
+            asyncio.create_task(self._monitoring_loop(),                   name='monitoring'),
+            asyncio.create_task(self._profit_analysis_loop(),              name='profit_analysis'),
         ]
-        
-        print("\n✅ All 6 agents started successfully!")
+
+        print("\n✅ Master Orchestrator + 11 agents started successfully!")
         print("📊 Dashboard available at http://localhost:8080")
         print("🔌 API available at http://localhost:8000")
         print("\nPress Ctrl+C to stop\n")
@@ -121,7 +141,9 @@ class PrintBotOrchestratorV2:
         """Stop all agents"""
         print("\n🛑 Stopping all agents...")
         self.running = False
-        
+
+        self.master_orchestrator.stop()
+
         # Stop each agent
         for name, agent in self.agents.items():
             print(f"   Stopping {name}...")
@@ -310,6 +332,14 @@ async def startup():
 async def health_check():
     """Health check endpoint"""
     return {"status": "healthy", "version": "2.0.0"}
+
+
+@app.get("/api/orchestrator")
+async def get_orchestrator():
+    """Get Master Orchestrator status — mode, strategy, agent priorities, intelligence flows"""
+    if orchestrator:
+        return orchestrator.master_orchestrator.get_status()
+    return {"error": "System not initialized"}
 
 
 @app.get("/api/status")

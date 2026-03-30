@@ -20,6 +20,8 @@ from agents.design_agent import DesignAgent
 from agents.pricing_agent import PricingAgent
 from agents.social_agent import SocialAgent
 from agents.fulfillment_agent import FulfillmentAgent
+from agents.master_orchestrator import MasterOrchestrator
+from agents.intelligence_bus import bus as intelligence_bus
 
 
 class DeadMansSwitch:
@@ -143,13 +145,24 @@ class PrintBotOrchestrator:
         self.pricing_agent = PricingAgent(self.session)
         self.social_agent = SocialAgent(self.session)
         self.fulfillment_agent = FulfillmentAgent(self.session)
-        
+
+        # Initialize Master Orchestrator (boss agent above all others)
+        self.master_orchestrator = MasterOrchestrator(
+            self.session,
+            {
+                'design':      self.design_agent,
+                'pricing':     self.pricing_agent,
+                'social':      self.social_agent,
+                'fulfillment': self.fulfillment_agent,
+            }
+        )
+
         # Initialize systems
         self.dead_mans_switch = DeadMansSwitch(
             config.system.check_in_interval // 3600
         )
         self.backup_manager = BackupManager(self.session)
-        
+
         # State
         self.running = False
         self.agent_tasks = []
@@ -172,8 +185,9 @@ class PrintBotOrchestrator:
         # Check configuration
         self._check_configuration()
         
-        # Create agent tasks
+        # Create agent tasks — Master Orchestrator runs first
         self.agent_tasks = [
+            asyncio.create_task(self.master_orchestrator.run(), ),
             asyncio.create_task(self.design_agent.run()),
             asyncio.create_task(self.pricing_agent.run()),
             asyncio.create_task(self.social_agent.run()),
@@ -203,6 +217,7 @@ class PrintBotOrchestrator:
         self.running = False
         
         # Stop agents
+        self.master_orchestrator.stop()
         self.design_agent.stop()
         self.pricing_agent.stop()
         self.social_agent.stop()
@@ -341,6 +356,14 @@ async def manual_backup():
         backup_file = await orchestrator.manual_backup()
         return {"status": "ok", "file": backup_file}
     raise HTTPException(status_code=503, detail="System not initialized")
+
+
+@app.get("/api/orchestrator")
+async def get_orchestrator():
+    """Get Master Orchestrator status — mode, strategy, agent priorities, intelligence flows"""
+    if orchestrator:
+        return orchestrator.master_orchestrator.get_status()
+    return {"error": "System not initialized"}
 
 
 @app.get("/api/analytics")

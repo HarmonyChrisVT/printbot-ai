@@ -20,7 +20,12 @@ import {
   BarChart2,
   MessageSquare,
   Users,
-  Heart
+  Heart,
+  Crown,
+  ArrowRight,
+  Network,
+  Target,
+  RefreshCw,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -64,6 +69,48 @@ interface Analytics {
     revenue: number;
     profit: number;
   };
+}
+
+interface OrchestratorDecision {
+  at: string;
+  mode: string;
+  mode_label?: string;
+  strategy: string;
+  mode_changed: boolean;
+  metrics: Record<string, number>;
+}
+
+interface IntelligenceFlow {
+  from: string;
+  to: string;
+  signal: string;
+  at: string;
+}
+
+interface OrchestratorStatus {
+  running: boolean;
+  eval_count: number;
+  last_eval_at: string | null;
+  next_eval_in: number;
+  mode: string;
+  mode_label: string;
+  mode_color: string;
+  strategy: string;
+  priority_queue: string[];
+  metrics: {
+    total_products: number;
+    approved_products: number;
+    pending_designs: number;
+    orders_today: number;
+    orders_week: number;
+    revenue: number;
+    fulfillment_backlog: number;
+    social_posts_today: number;
+  };
+  agent_insights: Record<string, Record<string, any>>;
+  agent_collaboration: Record<string, string>;
+  intelligence_flows: IntelligenceFlow[];
+  recent_decisions: OrchestratorDecision[];
 }
 
 // Mock data for demo
@@ -442,6 +489,204 @@ const agentConfig: Record<string, {
   },
 };
 
+// ── Master Orchestrator card ──────────────────────────────────────────────────
+
+const MODE_STYLES: Record<string, { bg: string; border: string; badge: string }> = {
+  design:      { bg: 'bg-blue-50',   border: 'border-blue-300',  badge: 'bg-blue-500' },
+  sell:        { bg: 'bg-green-50',  border: 'border-green-300', badge: 'bg-green-500' },
+  outreach:    { bg: 'bg-orange-50', border: 'border-orange-300',badge: 'bg-orange-500' },
+  fulfillment: { bg: 'bg-red-50',    border: 'border-red-300',   badge: 'bg-red-500' },
+};
+
+function MasterOrchestratorCard({ orch }: { orch: OrchestratorStatus }) {
+  const style = MODE_STYLES[orch.mode] ?? MODE_STYLES['sell'];
+  const m = orch.metrics;
+
+  return (
+    <Card className={`border-2 ${style.border} ${style.bg}`}>
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-gradient-to-br from-yellow-400 to-amber-500 rounded-xl shadow">
+              <Crown className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <CardTitle className="text-base">Master Orchestrator</CardTitle>
+              <CardDescription className="text-xs">
+                Boss agent · eval #{orch.eval_count}
+                {orch.last_eval_at
+                  ? ` · last run ${new Date(orch.last_eval_at).toLocaleTimeString()}`
+                  : ''}
+              </CardDescription>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className={`px-3 py-1 rounded-full text-white text-xs font-semibold ${style.badge}`}>
+              {orch.mode_label ?? orch.mode.replace('_', ' ').toUpperCase()}
+            </span>
+            <Badge variant={orch.running ? 'default' : 'secondary'}>
+              {orch.running ? 'Active' : 'Stopped'}
+            </Badge>
+          </div>
+        </div>
+      </CardHeader>
+
+      <CardContent className="space-y-4">
+        {/* Strategy text */}
+        <p className="text-sm text-foreground leading-snug">{orch.strategy}</p>
+
+        {/* Key metrics row */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+          {[
+            { label: 'Products', value: m.approved_products },
+            { label: 'Orders Today', value: m.orders_today },
+            { label: 'Revenue', value: `$${(m.revenue ?? 0).toLocaleString()}` },
+            { label: 'Backlog', value: m.fulfillment_backlog },
+          ].map(({ label, value }) => (
+            <div key={label} className="bg-white/60 rounded-lg p-2">
+              <p className="text-xs text-muted-foreground">{label}</p>
+              <p className="font-bold text-sm">{value}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Priority queue */}
+        {orch.priority_queue.length > 0 && (
+          <div>
+            <p className="text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1">
+              <Target className="w-3 h-3" /> Today's Priority Order
+            </p>
+            <div className="flex flex-wrap gap-1">
+              {orch.priority_queue.slice(0, 6).map((agent, i) => (
+                <span
+                  key={agent}
+                  className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                    i === 0 ? 'bg-amber-500 text-white' :
+                    i === 1 ? 'bg-amber-200 text-amber-900' :
+                    'bg-muted text-muted-foreground'
+                  }`}
+                >
+                  {i + 1}. {agent.replace('_', ' ')}
+                </span>
+              ))}
+              {orch.priority_queue.length > 6 && (
+                <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
+                  +{orch.priority_queue.length - 6} more
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Next eval countdown */}
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <RefreshCw className="w-3 h-3" />
+          Next evaluation in {Math.ceil((orch.next_eval_in ?? 300) / 60)} min
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ── Agent Collaboration panel ─────────────────────────────────────────────────
+
+function AgentCollaborationPanel({ orch }: { orch: OrchestratorStatus }) {
+  const flows = orch.intelligence_flows ?? [];
+  const collab = orch.agent_collaboration ?? {};
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex items-center gap-2">
+          <Network className="w-5 h-5 text-purple-500" />
+          <CardTitle className="text-base">Agent Collaboration</CardTitle>
+        </div>
+        <CardDescription>Real-time intelligence flows between agents</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {/* Intelligence flows */}
+        {flows.length > 0 ? (
+          <ScrollArea className="h-44">
+            <div className="space-y-2">
+              {flows.map((flow, i) => (
+                <div key={i} className="flex items-start gap-2 p-2 rounded-lg bg-muted/50 text-sm">
+                  <Badge variant="outline" className="text-xs shrink-0">{flow.from}</Badge>
+                  <ArrowRight className="w-3 h-3 mt-0.5 shrink-0 text-muted-foreground" />
+                  <Badge variant="outline" className="text-xs shrink-0">{flow.to}</Badge>
+                  <span className="text-xs text-muted-foreground flex-1">{flow.signal}</span>
+                  <span className="text-xs text-muted-foreground shrink-0">
+                    {new Date(flow.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </ScrollArea>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            Intelligence flows will appear here as agents share data.
+          </p>
+        )}
+
+        {/* Current agent tasks */}
+        {Object.keys(collab).length > 0 && (
+          <>
+            <Separator />
+            <div>
+              <p className="text-xs font-medium text-muted-foreground mb-2">Current Agent Tasks</p>
+              <div className="space-y-1">
+                {Object.entries(collab).slice(0, 6).map(([agent, task]) => (
+                  <div key={agent} className="flex items-start gap-2 text-xs">
+                    <span className="font-medium capitalize shrink-0 w-24">
+                      {agent.replace('_', ' ')}
+                    </span>
+                    <span className="text-muted-foreground">{task}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ── Recent decisions log ──────────────────────────────────────────────────────
+
+function OrchestratorDecisionsLog({ decisions }: { decisions: OrchestratorDecision[] }) {
+  if (!decisions.length) return null;
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm flex items-center gap-2">
+          <Crown className="w-4 h-4 text-amber-500" />
+          Orchestrator Decision Log
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <ScrollArea className="h-48">
+          <div className="space-y-2">
+            {decisions.map((d, i) => (
+              <div key={i} className="flex items-start gap-2 p-2 rounded-lg hover:bg-muted text-sm">
+                <div className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${
+                  d.mode_changed ? 'bg-amber-500' : 'bg-green-500'
+                }`} />
+                <span className="text-xs text-muted-foreground w-20 shrink-0">
+                  {new Date(d.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </span>
+                <Badge variant="outline" className="text-xs shrink-0">
+                  {(d.mode_label ?? d.mode).replace('_', ' ')}
+                </Badge>
+                <span className="text-xs">{d.strategy}</span>
+              </div>
+            ))}
+          </div>
+        </ScrollArea>
+      </CardContent>
+    </Card>
+  );
+}
+
 function mapApiStatus(data: any): SystemStatus {
   // Map snake_case API response to camelCase frontend types,
   // merging with mock data so agents without live stats still render.
@@ -470,18 +715,41 @@ function mapApiStatus(data: any): SystemStatus {
   };
 }
 
+const defaultOrchestrator: OrchestratorStatus = {
+  running: false,
+  eval_count: 0,
+  last_eval_at: null,
+  next_eval_in: 300,
+  mode: 'design',
+  mode_label: 'Design & Build',
+  mode_color: 'blue',
+  strategy: 'Master Orchestrator connecting…',
+  priority_queue: [],
+  metrics: {
+    total_products: 0, approved_products: 0, pending_designs: 0,
+    orders_today: 0, orders_week: 0, revenue: 0,
+    fulfillment_backlog: 0, social_posts_today: 0,
+  },
+  agent_insights: {},
+  agent_collaboration: {},
+  intelligence_flows: [],
+  recent_decisions: [],
+};
+
 function App() {
   const [status, setStatus] = useState<SystemStatus>(mockSystemStatus);
   const [analytics, setAnalytics] = useState<Analytics>(mockAnalytics);
+  const [orchestrator, setOrchestrator] = useState<OrchestratorStatus>(defaultOrchestrator);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [apiConnected, setApiConnected] = useState(true);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [statusRes, analyticsRes] = await Promise.all([
+        const [statusRes, analyticsRes, orchRes] = await Promise.all([
           fetch('/api/status'),
           fetch('/api/analytics'),
+          fetch('/api/orchestrator'),
         ]);
         if (statusRes.ok) {
           const data = await statusRes.json();
@@ -492,11 +760,14 @@ function App() {
         }
         if (analyticsRes.ok) {
           const data = await analyticsRes.json();
-          // Merge live analytics (today / week keys) over mock structure
           setAnalytics(prev => ({
             today: { ...prev.today, ...(data.today ?? {}) },
             week:  { ...prev.week,  ...(data.week  ?? {}) },
           }));
+        }
+        if (orchRes.ok) {
+          const data = await orchRes.json();
+          if (!data.error) setOrchestrator(data as OrchestratorStatus);
         }
       } catch {
         setApiConnected(false);
@@ -524,7 +795,14 @@ function App() {
                 <p className="text-xs text-muted-foreground">Automated Print-on-Demand System</p>
               </div>
             </div>
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3 flex-wrap">
+              {/* Priority mode pill from Master Orchestrator */}
+              <span className={`hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-full text-white text-xs font-semibold ${
+                { design: 'bg-blue-500', sell: 'bg-green-500', outreach: 'bg-orange-500', fulfillment: 'bg-red-500' }[orchestrator.mode] ?? 'bg-purple-500'
+              }`}>
+                <Crown className="w-3 h-3" />
+                {orchestrator.mode_label ?? orchestrator.mode.replace('_', ' ').toUpperCase()}
+              </span>
               <Badge variant={status.running ? "default" : "secondary"} className="gap-1">
                 {status.running ? <PlayCircle className="w-3 h-3" /> : <PauseCircle className="w-3 h-3" />}
                 {status.running ? 'System Active' : 'System Paused'}
@@ -553,6 +831,9 @@ function App() {
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="mb-6">
             <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
+            <TabsTrigger value="orchestrator" className="gap-1">
+              <Crown className="w-3 h-3" /> Orchestrator
+            </TabsTrigger>
             <TabsTrigger value="agents">Agents</TabsTrigger>
             <TabsTrigger value="analytics">Analytics</TabsTrigger>
             <TabsTrigger value="config">Configuration</TabsTrigger>
@@ -560,6 +841,9 @@ function App() {
 
           {/* Dashboard Tab */}
           <TabsContent value="dashboard" className="space-y-6">
+            {/* Master Orchestrator summary card */}
+            <MasterOrchestratorCard orch={orchestrator} />
+
             {/* Stats Row */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               <StatCard
@@ -603,8 +887,46 @@ function App() {
               })}
             </div>
 
+            {/* Agent Collaboration */}
+            <AgentCollaborationPanel orch={orchestrator} />
+
             {/* Dead Man's Switch */}
             <DeadMansSwitch status={status.deadMansSwitch} />
+          </TabsContent>
+
+          {/* Orchestrator Tab */}
+          <TabsContent value="orchestrator" className="space-y-6">
+            <MasterOrchestratorCard orch={orchestrator} />
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <AgentCollaborationPanel orch={orchestrator} />
+              <OrchestratorDecisionsLog decisions={orchestrator.recent_decisions} />
+            </div>
+            {/* Full agent task breakdown */}
+            {Object.keys(orchestrator.agent_collaboration).length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Activity className="w-4 h-4" /> All Agent Assignments
+                  </CardTitle>
+                  <CardDescription>
+                    What each agent is doing right now under{' '}
+                    <strong>{orchestrator.mode_label}</strong> mode
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {Object.entries(orchestrator.agent_collaboration).map(([agent, task]) => (
+                      <div key={agent} className="p-3 rounded-lg border bg-muted/30">
+                        <p className="font-medium text-sm capitalize mb-1">
+                          {agent.replace(/_/g, ' ')}
+                        </p>
+                        <p className="text-xs text-muted-foreground">{task}</p>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
           </TabsContent>
 
           {/* Agents Tab */}
