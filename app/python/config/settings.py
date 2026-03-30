@@ -133,7 +133,9 @@ class DesignConfig:
     image_quality: str = "standard"
     
     # Approval workflow
-    auto_approve: bool = False  # Set to True for full automation
+    # Set DESIGN_AUTO_APPROVE=true in .env to enable full automation.
+    # Without this, designs are generated but never turned into Shopify products.
+    auto_approve: bool = False
     approval_threshold: float = 0.8  # AI confidence threshold
     
     # Product templates
@@ -233,6 +235,9 @@ def load_config_from_env():
     config.fulfillment.smtp_password = os.getenv("SMTP_PASSWORD", "")
     config.fulfillment.notification_email = os.getenv("NOTIFICATION_EMAIL", "")
     
+    # Design auto-approval (REQUIRED for products to appear in Shopify)
+    config.design.auto_approve = os.getenv("DESIGN_AUTO_APPROVE", "false").lower() == "true"
+
     # System
     config.system.emergency_contact = os.getenv("EMERGENCY_CONTACT", "")
     config.system.backup_cloud_token = os.getenv("BACKUP_CLOUD_TOKEN", "")

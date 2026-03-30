@@ -469,6 +469,123 @@ async def get_profit_analytics():
     }
 
 
+@app.get("/api/test")
+async def run_diagnostics():
+    """
+    Full system diagnostic — call this to see exactly what is and isn't working.
+    Checks: Shopify connection, OpenAI config, auto_approve flag, and DB counts.
+    """
+    results = {}
+
+    # 1. Shopify live connection test
+    from integrations.shopify import ShopifyAPI
+    shopify_result = await ShopifyAPI().test_connection()
+    results["shopify"] = shopify_result
+
+    # 2. OpenAI configured
+    results["openai"] = {
+        "configured": config.openai.is_configured,
+        "model": config.openai.model,
+        "image_model": config.openai.image_model,
+    }
+
+    # 3. Design auto-approve — THIS is why products don't appear without it
+    results["design_pipeline"] = {
+        "auto_approve": config.design.auto_approve,
+        "approval_threshold": config.design.approval_threshold,
+        "max_daily_designs": config.design.max_daily_designs,
+        "warning": (
+            None if config.design.auto_approve
+            else "DESIGN_AUTO_APPROVE is false — designs are generated but never approved, "
+                 "so NO products will ever reach Shopify. Set DESIGN_AUTO_APPROVE=true in your .env."
+        ),
+    }
+
+    # 4. Database counts
+    if orchestrator:
+        session = orchestrator.session
+        from database.models import Design, Product
+        from datetime import date
+        today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+
+        designs_total    = session.query(Design).count()
+        designs_pending  = session.query(Design).filter(Design.status == "pending").count()
+        designs_approved = session.query(Design).filter(Design.status == "approved").count()
+        designs_today    = session.query(Design).filter(Design.created_at >= today_start).count()
+        products_total   = session.query(Product).count()
+        products_shopify = session.query(Product).filter(Product.shopify_id.isnot(None)).count()
+
+        results["database"] = {
+            "designs_total":    designs_total,
+            "designs_pending":  designs_pending,
+            "designs_approved": designs_approved,
+            "designs_today":    designs_today,
+            "products_in_db":   products_total,
+            "products_in_shopify": products_shopify,
+        }
+
+        # 5. Recent errors from agent logs
+        from database.models import AgentLog
+        recent_errors = (
+            session.query(AgentLog)
+            .filter(AgentLog.status == "error")
+            .order_by(AgentLog.created_at.desc())
+            .limit(5)
+            .all()
+        )
+        results["recent_errors"] = [
+            {
+                "agent":   e.agent_name,
+                "action":  e.action,
+                "details": e.details,
+                "time":    e.created_at.isoformat() if e.created_at else None,
+            }
+            for e in recent_errors
+        ]
+    else:
+        results["database"] = {"error": "orchestrator not initialized"}
+        results["recent_errors"] = []
+
+    return results
+
+
+@app.post("/api/trigger/design")
+async def trigger_design():
+    """
+    Manually trigger one complete design → approve → Shopify product cycle.
+    Bypasses the 30-minute timer and the auto_approve setting.
+    Use this to test the end-to-end pipeline immediately.
+    """
+    if not orchestrator:
+        raise HTTPException(status_code=503, detail="System not initialized")
+
+    if not config.openai.is_configured:
+        raise HTTPException(status_code=400, detail="OPENAI_API_KEY not set — cannot generate design")
+
+    agent = orchestrator.agents["design"]
+
+    # Run one full cycle in the background so the HTTP response returns immediately
+    async def _run():
+        try:
+            # Temporarily force auto_approve on for this manual trigger
+            original = config.design.auto_approve
+            config.design.auto_approve = True
+            await agent._process_cycle()
+            config.design.auto_approve = original
+        except Exception as e:
+            print(f"❌ Manual design trigger error: {e}")
+
+    asyncio.create_task(_run())
+
+    return {
+        "status": "triggered",
+        "message": (
+            "Design cycle started in background. "
+            "Check /api/test in ~60 seconds to see if a product was created in Shopify."
+        ),
+    }
+
+
 def main():
     """Main entry point"""
     orchestrator = PrintBotOrchestratorV2()
