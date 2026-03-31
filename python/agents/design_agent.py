@@ -212,7 +212,9 @@ class DesignGenerator:
             return design
             
         except Exception as e:
-            print(f"Error generating design: {e}")
+            import traceback
+            print(f"❌ Error generating design: {e}")
+            print(traceback.format_exc())
             return None
     
     def _create_prompt(self, trend: Dict) -> str:

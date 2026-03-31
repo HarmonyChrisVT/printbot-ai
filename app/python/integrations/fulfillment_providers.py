@@ -98,6 +98,8 @@ class PrintfulProvider(BaseFulfillmentProvider):
                             await asyncio.sleep(60)
                             return None
                         else:
+                            body = await response.text()
+                            print(f"❌ Printful {response.status} on {endpoint}: {body[:300]}")
                             self.mark_failure()
                             return None
                 
@@ -117,9 +119,14 @@ class PrintfulProvider(BaseFulfillmentProvider):
     
     async def health_check(self) -> bool:
         """Check Printful health"""
+        print(f"🔍 Printful health check — api_key={'set (' + self.api_key[:8] + '...)' if self.api_key else 'NOT SET'}")
+        print(f"   URL: {self.base_url}/store")
+        print(f"   Auth header: Bearer {self.api_key[:8]}..." if self.api_key else "   Auth header: MISSING")
         result = await self._request('GET', '/store')
         self.last_check = datetime.utcnow()
-        return result is not None
+        healthy = result is not None
+        print(f"   Printful health: {'✅ healthy' if healthy else '❌ unhealthy'}")
+        return healthy
     
     async def create_order(self, order_data: Dict) -> Optional[Dict]:
         """Create Printful order"""
