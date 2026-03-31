@@ -19,15 +19,15 @@ class ShopifyConfig:
        The client credentials flow exchanges ID+Secret for a short-lived token automatically.
     """
     shop_url: str = ""
-    access_token: str = ""       # shpca_... legacy permanent token
-    client_id: str = ""          # Dev Dashboard Client ID
-    client_secret: str = ""      # shpss_... Dev Dashboard Client Secret
+    access_token: str = ""   # legacy shpca_... permanent token (SHOPIFY_ACCESS_TOKEN)
+    api_key: str = ""        # Dev Dashboard Client ID    (SHOPIFY_API_KEY)
+    api_secret: str = ""     # Dev Dashboard Client Secret (SHOPIFY_API_SECRET / shpss_...)
     api_version: str = "2025-01"
 
     @property
     def is_configured(self) -> bool:
         has_token = bool(self.shop_url and self.access_token)
-        has_oauth = bool(self.shop_url and self.client_id and self.client_secret)
+        has_oauth = bool(self.shop_url and self.api_key and self.api_secret)
         return has_token or has_oauth
 
 
@@ -226,8 +226,8 @@ def load_config_from_env():
         raw_url = raw_url[len("http://"):]
     config.shopify.shop_url = raw_url
     config.shopify.access_token = os.getenv("SHOPIFY_ACCESS_TOKEN", "").strip()
-    config.shopify.client_id = os.getenv("SHOPIFY_CLIENT_ID", "").strip()
-    config.shopify.client_secret = os.getenv("SHOPIFY_CLIENT_SECRET", "").strip()
+    config.shopify.api_key      = os.getenv("SHOPIFY_API_KEY", "").strip()
+    config.shopify.api_secret   = os.getenv("SHOPIFY_API_SECRET", "").strip()
     
     # Printful
     config.printful.api_key = os.getenv("PRINTFUL_API_KEY", "")

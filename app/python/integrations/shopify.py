@@ -1,14 +1,25 @@
 """
 PrintBot AI - Shopify Integration
 ==================================
-Handles all Shopify API interactions
+Handles all Shopify API interactions.
+
+Auth: supports two modes
+  1. Legacy permanent token  — set SHOPIFY_ACCESS_TOKEN (shpca_...)
+  2. Dev Dashboard OAuth     — set SHOPIFY_API_KEY + SHOPIFY_API_SECRET (shpss_...)
+     Tokens are fetched via client credentials grant and cached for 23 hours.
 """
 import aiohttp
 import traceback
 from typing import List, Dict, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from config.settings import config
+
+# Module-level token cache — shared across all ShopifyAPI instances so we
+# don't hammer the OAuth endpoint on every API call.
+_cached_token: Optional[str] = None
+_token_fetched_at: Optional[datetime] = None
+_TOKEN_TTL = timedelta(hours=23)
 
 
 class ShopifyAPI:
@@ -16,25 +27,32 @@ class ShopifyAPI:
 
     def __init__(self):
         self.shop_url = config.shopify.shop_url
-        self.access_token = config.shopify.access_token
-        self.client_id = config.shopify.client_id
-        self.client_secret = config.shopify.client_secret
+        self.api_key = config.shopify.api_key
+        self.api_secret = config.shopify.api_secret
         self.api_version = config.shopify.api_version
         self.base_url = f"https://{self.shop_url}/admin/api/{self.api_version}"
 
-        print(f"🔧 ShopifyAPI init — shop_url={repr(self.shop_url)} | base_url={self.base_url} | token_prefix={self.access_token[:8] if self.access_token else 'EMPTY'} | has_oauth={bool(self.client_id and self.client_secret)}")
+        # Static token (legacy shpca_...) — used directly if set
+        self._static_token = config.shopify.access_token
 
-        self.headers = {
-            'X-Shopify-Access-Token': self.access_token,
-            'Content-Type': 'application/json'
+        print(
+            f"🔧 ShopifyAPI init — shop_url={repr(self.shop_url)} "
+            f"| static_token={'yes' if self._static_token else 'no'} "
+            f"| oauth={'yes' if (self.api_key and self.api_secret) else 'no'}"
+        )
+
+    def _make_headers(self, token: str) -> Dict:
+        return {
+            'X-Shopify-Access-Token': token,
+            'Content-Type': 'application/json',
         }
 
     async def _fetch_oauth_token(self) -> str:
-        """Exchange Client ID + Secret for an access token via client credentials grant."""
+        """Exchange API key + secret for an access token via client credentials grant."""
         url = f"https://{self.shop_url}/admin/oauth/access_token"
         payload = {
-            "client_id": self.client_id,
-            "client_secret": self.client_secret,
+            "client_id": self.api_key,
+            "client_secret": self.api_secret,
             "grant_type": "client_credentials",
         }
         async with aiohttp.ClientSession() as session:
@@ -46,18 +64,33 @@ class ShopifyAPI:
                     return token
                 raise Exception(f"OAuth token exchange failed ({resp.status}): {body}")
 
-    async def _ensure_token(self):
-        """If using client credentials, fetch a token and update headers."""
-        if not self.access_token and self.client_id and self.client_secret:
-            self.access_token = await self._fetch_oauth_token()
-            self.headers['X-Shopify-Access-Token'] = self.access_token
+    async def _get_token(self) -> str:
+        """Return a valid access token, refreshing if needed."""
+        global _cached_token, _token_fetched_at
+
+        # Use static legacy token if set
+        if self._static_token:
+            return self._static_token
+
+        # Use cached OAuth token if still fresh
+        if (
+            _cached_token
+            and _token_fetched_at
+            and datetime.utcnow() - _token_fetched_at < _TOKEN_TTL
+        ):
+            return _cached_token
+
+        # Fetch a new OAuth token
+        _cached_token = await self._fetch_oauth_token()
+        _token_fetched_at = datetime.utcnow()
+        return _cached_token
     
     async def _request(self, method: str, endpoint: str, data: Dict = None) -> Optional[Dict]:
         """Make API request"""
-        await self._ensure_token()
+        token = await self._get_token()
         url = f"{self.base_url}{endpoint}"
 
-        async with aiohttp.ClientSession(headers=self.headers) as session:
+        async with aiohttp.ClientSession(headers=self._make_headers(token)) as session:
             try:
                 if method == 'GET':
                     async with session.get(url, timeout=30) as response:
@@ -245,16 +278,21 @@ class ShopifyAPI:
 
     async def test_connection(self) -> Dict:
         """
-        Validate the Custom App access token by hitting /shop.json.
+        Validate Shopify credentials by hitting /shop.json.
         Returns dict with 'ok' bool, 'shop_name', and 'message'.
         """
-        if not self.shop_url or not self.access_token:
-            return {'ok': False, 'shop_name': None, 'message': 'SHOPIFY_SHOP_URL or SHOPIFY_ACCESS_TOKEN not set'}
+        has_static = bool(self.shop_url and self._static_token)
+        has_oauth  = bool(self.shop_url and self.api_key and self.api_secret)
+        if not has_static and not has_oauth:
+            return {
+                'ok': False, 'shop_name': None,
+                'message': 'Set SHOPIFY_SHOP_URL + SHOPIFY_API_KEY + SHOPIFY_API_SECRET in Railway'
+            }
         try:
             shop = await self.get_shop_info()
             if shop:
                 return {'ok': True, 'shop_name': shop.get('name', 'Unknown'), 'message': 'Connected'}
-            return {'ok': False, 'shop_name': None, 'message': 'Token rejected — check scopes or token value'}
+            return {'ok': False, 'shop_name': None, 'message': 'Token rejected — check scopes'}
         except Exception as e:
             return {'ok': False, 'shop_name': None, 'message': str(e)}
     
