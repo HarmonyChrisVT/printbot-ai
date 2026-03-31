@@ -168,7 +168,7 @@ class DesignGenerator:
     """Generates AI designs using DALL-E"""
     
     def __init__(self):
-        self.client = openai.OpenAI(api_key=config.openai.api_key)
+        self.client = openai.AsyncOpenAI(api_key=config.openai.api_key)
         self.output_dir = Path("./data/designs")
         self.output_dir.mkdir(parents=True, exist_ok=True)
     
@@ -179,7 +179,7 @@ class DesignGenerator:
             prompt = self._create_prompt(trend)
             
             # Generate image with DALL-E
-            response = self.client.images.generate(
+            response = await self.client.images.generate(
                 model=config.openai.image_model,
                 prompt=prompt,
                 size=config.design.image_size,

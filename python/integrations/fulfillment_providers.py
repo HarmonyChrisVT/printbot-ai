@@ -120,9 +120,9 @@ class PrintfulProvider(BaseFulfillmentProvider):
     async def health_check(self) -> bool:
         """Check Printful health"""
         print(f"🔍 Printful health check — api_key={'set (' + self.api_key[:8] + '...)' if self.api_key else 'NOT SET'}")
-        print(f"   URL: {self.base_url}/store")
+        print(f"   URL: {self.base_url}/catalog/products")
         print(f"   Auth header: Bearer {self.api_key[:8]}..." if self.api_key else "   Auth header: MISSING")
-        result = await self._request('GET', '/store')
+        result = await self._request('GET', '/catalog/products?limit=1')
         self.last_check = datetime.utcnow()
         healthy = result is not None
         print(f"   Printful health: {'✅ healthy' if healthy else '❌ unhealthy'}")
