@@ -68,8 +68,8 @@ class ShopifyAPI:
         """Return a valid access token, refreshing if needed."""
         global _cached_token, _token_fetched_at
 
-        # Use static legacy token if set
-        if self._static_token:
+        # Use static legacy token only if it's a real access token (shpca_), not a secret (shpss_)
+        if self._static_token and not self._static_token.startswith("shpss_"):
             return self._static_token
 
         # Use cached OAuth token if still fresh

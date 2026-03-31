@@ -376,6 +376,13 @@ async def startup():
         print(f"✅ Loaded saved credentials from {CONFIG_RUNTIME_FILE}")
     # Re-load config now that env is fully populated
     load_config_from_env()
+
+    # If the runtime file saved an API secret (shpss_) as an access token, clear it —
+    # shpss_ is the Client Secret, not an access token; OAuth flow handles auth instead.
+    if config.shopify.access_token.startswith("shpss_"):
+        print("⚠️  SHOPIFY_ACCESS_TOKEN looks like an API secret (shpss_) — clearing it, OAuth will be used instead")
+        config.shopify.access_token = ""
+        _os.environ["SHOPIFY_ACCESS_TOKEN"] = ""
     try:
         orchestrator = PrintBotOrchestratorV2()
         asyncio.create_task(orchestrator.start())
