@@ -213,8 +213,14 @@ config = AppConfig()
 def load_config_from_env():
     """Load configuration from environment variables"""
     # Shopify (Custom App — only two vars needed)
-    config.shopify.shop_url = os.getenv("SHOPIFY_SHOP_URL", "")
-    config.shopify.access_token = os.getenv("SHOPIFY_ACCESS_TOKEN", "")
+    raw_url = os.getenv("SHOPIFY_SHOP_URL", "")
+    raw_url = raw_url.strip().rstrip("/")
+    if raw_url.startswith("https://"):
+        raw_url = raw_url[len("https://"):]
+    if raw_url.startswith("http://"):
+        raw_url = raw_url[len("http://"):]
+    config.shopify.shop_url = raw_url
+    config.shopify.access_token = os.getenv("SHOPIFY_ACCESS_TOKEN", "").strip()
     
     # Printful
     config.printful.api_key = os.getenv("PRINTFUL_API_KEY", "")
