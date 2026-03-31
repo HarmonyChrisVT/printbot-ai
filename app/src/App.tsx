@@ -945,20 +945,36 @@ function OrchestratorDecisionsLog({ decisions }: { decisions: OrchestratorDecisi
   );
 }
 
+const agentDisplayNames: Record<string, string> = {
+  design:               'Design Agent',
+  pricing:              'Pricing Agent',
+  social:               'Social Agent',
+  fulfillment:          'Fulfillment Agent',
+  b2b:                  'B2B Agent',
+  content_writer:       'Content Writer Agent',
+  competitor_spy:       'Competitor Spy Agent',
+  inventory_prediction: 'Inventory Prediction Agent',
+  customer_service:     'Customer Service Chatbot',
+  affiliate:            'Affiliate Agent',
+  customer_engagement:  'Customer Engagement Agent',
+};
+
 function mapApiStatus(data: any): SystemStatus {
-  // Map snake_case API response to camelCase frontend types,
-  // merging with mock data so agents without live stats still render.
-  const agents = { ...mockSystemStatus.agents };
+  // Map snake_case API response to camelCase frontend types using live data only.
+  const agents: Record<string, AgentStatus> = {};
   if (data.agents) {
     for (const [key, val] of Object.entries(data.agents as Record<string, any>)) {
-      if (agents[key]) {
-        agents[key] = { ...agents[key], running: val.running ?? agents[key].running };
-      }
+      agents[key] = {
+        name:         agentDisplayNames[key] ?? key,
+        running:      val.running      ?? false,
+        lastActivity: val.last_activity ?? 'unknown',
+        stats:        val.stats        ?? {},
+      };
     }
   }
   const dms = data.dead_mans_switch ?? data.deadMansSwitch ?? {};
   return {
-    running: data.running ?? mockSystemStatus.running,
+    running: data.running ?? false,
     agents,
     config: {
       shopify:  data.config?.shopify  ?? false,
@@ -966,8 +982,8 @@ function mapApiStatus(data: any): SystemStatus {
       openai:   data.config?.openai   ?? false,
     },
     deadMansSwitch: {
-      isPaused:       dms.is_paused       ?? dms.isPaused       ?? false,
-      lastCheckin:    dms.last_checkin    ?? dms.lastCheckin    ?? new Date().toISOString(),
+      isPaused:       dms.is_paused        ?? dms.isPaused       ?? false,
+      lastCheckin:    dms.last_checkin     ?? dms.lastCheckin     ?? new Date().toISOString(),
       timeUntilPause: dms.time_until_pause ?? dms.timeUntilPause ?? 82800,
     },
   };
@@ -995,8 +1011,16 @@ const defaultOrchestrator: OrchestratorStatus = {
 };
 
 function App() {
-  const [status, setStatus] = useState<SystemStatus>(mockSystemStatus);
-  const [analytics, setAnalytics] = useState<Analytics>(mockAnalytics);
+  const [status, setStatus] = useState<SystemStatus>({
+    running: false,
+    agents: {},
+    config: { shopify: false, printful: false, openai: false },
+    deadMansSwitch: { isPaused: false, lastCheckin: new Date().toISOString(), timeUntilPause: 82800 },
+  });
+  const [analytics, setAnalytics] = useState<Analytics>({
+    today: { orders: 0, revenue: 0, profit: 0, designs: 0, posts: 0 },
+    week:  { orders: 0, revenue: 0, profit: 0 },
+  });
   const [orchestrator, setOrchestrator] = useState<OrchestratorStatus>(defaultOrchestrator);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [apiConnected, setApiConnected] = useState(true);
