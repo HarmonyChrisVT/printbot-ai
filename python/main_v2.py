@@ -6,6 +6,7 @@ Coordinates all 6 AI agents with enhanced features
 import asyncio
 import signal
 import sys
+import traceback
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List
@@ -715,26 +716,36 @@ async def trigger_design():
     Bypasses the 30-minute timer and the auto_approve setting.
     Use this to test the end-to-end pipeline immediately.
     """
-    if not orchestrator:
-        raise HTTPException(status_code=503, detail="System not initialized")
+    try:
+        if not orchestrator:
+            raise HTTPException(status_code=503, detail="System not initialized")
 
-    if not config.openai.is_configured:
-        raise HTTPException(status_code=400, detail="OPENAI_API_KEY not set — cannot generate design")
+        if not config.openai.is_configured:
+            raise HTTPException(status_code=400, detail="OPENAI_API_KEY not set — cannot generate design")
 
-    agent = orchestrator.agents["design"]
+        if "design" not in orchestrator.agents:
+            raise HTTPException(status_code=503, detail=f"Design agent not found. Available agents: {list(orchestrator.agents.keys())}")
 
-    # Run one full cycle in the background so the HTTP response returns immediately
-    async def _run():
-        try:
-            # Temporarily force auto_approve on for this manual trigger
-            original = config.design.auto_approve
-            config.design.auto_approve = True
-            await agent._process_cycle()
-            config.design.auto_approve = original
-        except Exception as e:
-            print(f"❌ Manual design trigger error: {e}")
+        agent = orchestrator.agents["design"]
 
-    asyncio.create_task(_run())
+        # Run one full cycle in the background so the HTTP response returns immediately
+        async def _run():
+            try:
+                original = config.design.auto_approve
+                config.design.auto_approve = True
+                await agent._process_cycle()
+                config.design.auto_approve = original
+            except Exception as e:
+                print(f"❌ Manual design trigger error: {e}")
+                print(traceback.format_exc())
+
+        asyncio.create_task(_run())
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ /api/trigger/design endpoint error: {e}")
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
 
     return {
         "status": "triggered",
