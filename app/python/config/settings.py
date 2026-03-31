@@ -18,8 +18,8 @@ class ShopifyConfig:
     See SHOPIFY_SETUP.md for step-by-step instructions.
     """
     shop_url: str = ""      # e.g. your-store.myshopify.com
-    access_token: str = ""  # shpat_... token from Custom App
-    api_version: str = "2024-01"
+    access_token: str = ""  # shpca_... token from Custom App
+    api_version: str = "2025-01"
 
     @property
     def is_configured(self) -> bool:
