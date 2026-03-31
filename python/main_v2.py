@@ -83,16 +83,8 @@ class PrintBotOrchestratorV2:
         self.running = False
         self.agent_tasks = []
         self.dead_mans_switch_last_checkin = datetime.utcnow()
-        
-        # Setup signal handlers
-        signal.signal(signal.SIGINT, self._signal_handler)
-        signal.signal(signal.SIGTERM, self._signal_handler)
-    
-    def _signal_handler(self, signum, frame):
-        """Handle shutdown signals"""
-        print("\n🛑 Shutdown signal received")
-        self.stop()
-        sys.exit(0)
+        # Note: signal handlers are intentionally NOT set here.
+        # uvicorn manages SIGINT/SIGTERM for graceful shutdown in production.
     
     async def start(self):
         """Start all agents"""
@@ -374,12 +366,19 @@ async def startup():
     global orchestrator
     # Load previously saved runtime credentials before initialising the orchestrator
     import os as _os
+    _os.makedirs("/app/data", exist_ok=True)
     if _os.path.exists(CONFIG_RUNTIME_FILE):
         from dotenv import load_dotenv as _ld
         _ld(CONFIG_RUNTIME_FILE, override=True)
         print(f"✅ Loaded saved credentials from {CONFIG_RUNTIME_FILE}")
-    orchestrator = PrintBotOrchestratorV2()
-    asyncio.create_task(orchestrator.start())
+    # Re-load config now that env is fully populated
+    load_config_from_env()
+    try:
+        orchestrator = PrintBotOrchestratorV2()
+        asyncio.create_task(orchestrator.start())
+    except Exception as e:
+        print(f"❌ Orchestrator init failed: {e} — API still running, use dashboard to configure keys")
+        # orchestrator stays None; all /api/* endpoints handle that gracefully
 
 
 @app.get("/api/health")

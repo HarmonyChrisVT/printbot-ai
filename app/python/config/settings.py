@@ -238,6 +238,9 @@ def load_config_from_env():
     # Design auto-approval (REQUIRED for products to appear in Shopify)
     config.design.auto_approve = os.getenv("DESIGN_AUTO_APPROVE", "false").lower() == "true"
 
+    # Database path (set in Dockerfile / Railway env)
+    config.database_path = os.getenv("DATABASE_PATH", "/app/data/printbot.db")
+
     # System
     config.system.emergency_contact = os.getenv("EMERGENCY_CONTACT", "")
     config.system.backup_cloud_token = os.getenv("BACKUP_CLOUD_TOKEN", "")
