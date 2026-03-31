@@ -400,7 +400,22 @@ async def get_status():
     """Get system status"""
     if orchestrator:
         return orchestrator.get_status()
-    return {"error": "System not initialized"}
+    # Orchestrator not yet started — still return live config so the
+    # dashboard shows the correct connected/disconnected state.
+    return {
+        "running": False,
+        "agents": {},
+        "config": {
+            "shopify":  config.shopify.is_configured,
+            "printful": config.printful.is_configured,
+            "openai":   config.openai.is_configured,
+        },
+        "dead_mans_switch": {
+            "is_paused": False,
+            "last_checkin": datetime.utcnow().isoformat(),
+            "time_until_pause": 82800,
+        },
+    }
 
 
 @app.post("/api/checkin")
