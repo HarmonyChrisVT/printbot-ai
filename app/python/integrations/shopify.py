@@ -4,6 +4,7 @@ PrintBot AI - Shopify Integration
 Handles all Shopify API interactions
 """
 import aiohttp
+import traceback
 from typing import List, Dict, Optional
 from datetime import datetime
 
@@ -18,7 +19,9 @@ class ShopifyAPI:
         self.access_token = config.shopify.access_token
         self.api_version = config.shopify.api_version
         self.base_url = f"https://{self.shop_url}/admin/api/{self.api_version}"
-        
+
+        print(f"🔧 ShopifyAPI init — shop_url={repr(self.shop_url)} | base_url={self.base_url} | token_prefix={self.access_token[:8] if self.access_token else 'EMPTY'}")
+
         self.headers = {
             'X-Shopify-Access-Token': self.access_token,
             'Content-Type': 'application/json'
@@ -62,7 +65,8 @@ class ShopifyAPI:
                         return response.status == 200
                         
             except Exception as e:
-                print(f"❌ Shopify request error: {e}")
+                print(f"❌ Shopify request error on {url}: {e}")
+                print(traceback.format_exc())
                 return None
     
     # Products
