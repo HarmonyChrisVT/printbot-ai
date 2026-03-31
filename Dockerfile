@@ -26,6 +26,7 @@ ENV DATABASE_PATH=/app/data/printbot.db
 ENV LOG_LEVEL=INFO
 
 # Railway sets $PORT dynamically — uvicorn picks it up via the CMD
+
 EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
