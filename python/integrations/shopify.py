@@ -96,6 +96,9 @@ class ShopifyAPI:
                     async with session.get(url, timeout=30) as response:
                         if response.status == 200:
                             return await response.json()
+                        elif response.status == 403:
+                            print(f"⚠️  Shopify 403 on {endpoint} — scope not granted, skipping")
+                            return None
                         else:
                             body = await response.text()
                             print(f"❌ Shopify API error {response.status} on {endpoint}: {body[:200]}")
@@ -219,13 +222,15 @@ class ShopifyAPI:
     
     # Orders
     async def get_orders(self, since_id: str = None, status: str = 'any', limit: int = 50) -> List[Dict]:
-        """Get orders from store"""
+        """Get orders from store. Returns [] if read_orders scope not granted (403)."""
         endpoint = f'/orders.json?status={status}&limit={limit}'
         if since_id:
             endpoint += f'&since_id={since_id}'
-        
-        response = await self._request('GET', endpoint)
-        return response.get('orders', []) if response else []
+        try:
+            response = await self._request('GET', endpoint)
+            return response.get('orders', []) if response else []
+        except Exception:
+            return []
     
     async def get_order(self, order_id: str) -> Optional[Dict]:
         """Get a single order"""
@@ -278,7 +283,7 @@ class ShopifyAPI:
 
     async def test_connection(self) -> Dict:
         """
-        Validate Shopify credentials by hitting /shop.json.
+        Validate Shopify credentials by listing products (avoids read_orders scope).
         Returns dict with 'ok' bool, 'shop_name', and 'message'.
         """
         has_static = bool(self.shop_url and self._static_token)
@@ -289,9 +294,10 @@ class ShopifyAPI:
                 'message': 'Set SHOPIFY_SHOP_URL + SHOPIFY_API_KEY + SHOPIFY_API_SECRET in Railway'
             }
         try:
-            shop = await self.get_shop_info()
-            if shop:
-                return {'ok': True, 'shop_name': shop.get('name', 'Unknown'), 'message': 'Connected'}
+            # Use /products.json — does not require read_orders scope
+            response = await self._request('GET', '/products.json?limit=1')
+            if response is not None:
+                return {'ok': True, 'shop_name': self.shop_url, 'message': 'Connected'}
             return {'ok': False, 'shop_name': None, 'message': 'Token rejected — check scopes'}
         except Exception as e:
             return {'ok': False, 'shop_name': None, 'message': str(e)}

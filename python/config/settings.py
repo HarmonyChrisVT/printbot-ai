@@ -230,8 +230,8 @@ def load_config_from_env():
     config.shopify.api_secret   = os.getenv("SHOPIFY_API_SECRET", "").strip()
     
     # Printful
-    config.printful.api_key = os.getenv("PRINTFUL_API_KEY", "")
-    config.printful.store_id = os.getenv("PRINTFUL_STORE_ID", "")
+    config.printful.api_key = os.getenv("PRINTFUL_API_KEY", "").strip()
+    config.printful.store_id = os.getenv("PRINTFUL_STORE_ID", "").strip()
     
     # OpenAI
     config.openai.api_key = os.getenv("OPENAI_API_KEY", "")

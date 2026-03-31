@@ -325,6 +325,24 @@ class Referral(Base):
     affiliate = relationship("Affiliate", back_populates="referrals")
 
 
+class CorporateClient(Base):
+    """B2B corporate clients"""
+    __tablename__ = 'corporate_clients'
+
+    id = Column(Integer, primary_key=True)
+    company_name = Column(String(255))
+    contact_name = Column(String(255))
+    email = Column(String(255), unique=True)
+    phone = Column(String(50))
+    tax_id = Column(String(100))
+    payment_terms = Column(String(20), default='net30')
+    discount_tier = Column(String(20), default='bronze')
+    credit_limit = Column(Float, default=0.0)
+    current_balance = Column(Float, default=0.0)
+    is_approved = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 class BulkQuote(Base):
     """B2B bulk order quotes"""
     __tablename__ = 'bulk_quotes'
