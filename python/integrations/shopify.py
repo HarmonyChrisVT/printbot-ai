@@ -55,12 +55,30 @@ class ShopifyAPI:
             "client_secret": self.api_secret,
             "grant_type": "client_credentials",
         }
+        headers = {"Content-Type": "application/json"}
+
+        print("=" * 60)
+        print("🔐 Shopify OAuth token request")
+        print(f"   POST {url}")
+        print(f"   Headers: {headers}")
+        print(f"   Body: client_id={self.api_key[:8]}... client_secret={self.api_secret[:8]}... grant_type=client_credentials")
+        print("=" * 60)
+
         async with aiohttp.ClientSession() as session:
-            async with session.post(url, json=payload, timeout=30) as resp:
-                body = await resp.json()
+            async with session.post(url, json=payload, headers=headers, timeout=30) as resp:
+                raw = await resp.text()
+                print("=" * 60)
+                print(f"🔐 Shopify OAuth response — status: {resp.status}")
+                print(f"   Response headers: {dict(resp.headers)}")
+                print(f"   Raw body: {raw}")
+                print("=" * 60)
+                try:
+                    body = __import__("json").loads(raw)
+                except Exception:
+                    raise Exception(f"OAuth token exchange failed ({resp.status}): {raw}")
                 if resp.status == 200 and "access_token" in body:
                     token = body["access_token"]
-                    print(f"✅ Shopify OAuth token fetched (prefix: {token[:8]})")
+                    print(f"✅ Shopify OAuth token fetched — prefix: {token[:8]} | scopes: {body.get('scope', 'N/A')}")
                     return token
                 raise Exception(f"OAuth token exchange failed ({resp.status}): {body}")
 
