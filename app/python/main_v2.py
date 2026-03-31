@@ -802,9 +802,21 @@ async def run_diagnostics():
     shopify_result = await ShopifyAPI().test_connection()
     results["shopify"] = shopify_result
 
-    # 2. OpenAI configured
+    # 2. OpenAI live connection test
+    openai_ok = False
+    openai_error = None
+    if config.openai.is_configured:
+        try:
+            import openai as _openai
+            _client = _openai.AsyncOpenAI(api_key=config.openai.api_key, timeout=10.0)
+            await _client.models.list()
+            openai_ok = True
+        except Exception as _e:
+            openai_error = str(_e)
     results["openai"] = {
         "configured": config.openai.is_configured,
+        "reachable": openai_ok,
+        "error": openai_error,
         "model": config.openai.model,
         "image_model": config.openai.image_model,
     }

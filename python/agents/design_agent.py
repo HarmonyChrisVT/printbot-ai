@@ -168,7 +168,7 @@ class DesignGenerator:
     """Generates AI designs using DALL-E"""
     
     def __init__(self):
-        self.client = openai.AsyncOpenAI(api_key=config.openai.api_key)
+        self.client = openai.AsyncOpenAI(api_key=config.openai.api_key, timeout=120.0)
         self.output_dir = Path("./data/designs")
         self.output_dir.mkdir(parents=True, exist_ok=True)
     
