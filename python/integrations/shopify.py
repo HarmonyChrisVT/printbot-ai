@@ -108,19 +108,26 @@ class ShopifyAPI:
         """Make API request"""
         token = await self._get_token()
         url = f"{self.base_url}{endpoint}"
+        headers = self._make_headers(token)
 
-        async with aiohttp.ClientSession(headers=self._make_headers(token)) as session:
+        print(f"🌐 Shopify {method} {url}")
+        print(f"   X-Shopify-Access-Token: {token[:12]}...{token[-4:] if len(token) > 16 else ''}")
+        print(f"   Content-Type: {headers.get('Content-Type')}")
+
+        async with aiohttp.ClientSession(headers=headers) as session:
             try:
                 if method == 'GET':
                     async with session.get(url, timeout=30) as response:
+                        print(f"   → {response.status}")
                         if response.status == 200:
                             return await response.json()
                         elif response.status == 403:
-                            print(f"⚠️  Shopify 403 on {endpoint} — scope not granted, skipping")
+                            body = await response.text()
+                            print(f"⚠️  Shopify 403 on {endpoint} — full response: {body}")
                             return None
                         else:
                             body = await response.text()
-                            print(f"❌ Shopify API error {response.status} on {endpoint}: {body[:200]}")
+                            print(f"❌ Shopify API error {response.status} on {endpoint}: {body[:500]}")
                             return None
 
                 elif method == 'POST':
