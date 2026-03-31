@@ -438,7 +438,7 @@ class DesignAgent:
             product_type='T-Shirt',
             tags=design.trend_keywords or [],
             design_id=design.id,
-            design_url=design.image_url,
+            design_url=product_image_url,   # permanent CDN URL for social posting
             selling_price=base_price,
             is_active=True,
             is_approved=True,
@@ -453,7 +453,7 @@ class DesignAgent:
                 size=v['size'],
                 sku=v['sku'],
                 selling_price=v['price'],
-                inventory_quantity=v['inventory'],
+                inventory_quantity=0,  # print-on-demand — no pre-stocked inventory
             )
             self.session.add(variant)
 

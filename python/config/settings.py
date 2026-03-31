@@ -73,21 +73,32 @@ class OpenAIConfig:
 
 @dataclass
 class SocialMediaConfig:
-    """Social Media API Configuration"""
-    # Instagram
+    """Social Media API Configuration
+
+    Instagram posting uses the official Meta Graph API:
+      - INSTAGRAM_ACCESS_TOKEN  : long-lived token from Meta developer app
+      - INSTAGRAM_USER_ID       : numeric Instagram Business / Creator account ID
+
+    TikTok posting uses the official TikTok Content Posting API v2:
+      - TIKTOK_ACCESS_TOKEN     : OAuth2 token from TikTok for Developers app
+      - TIKTOK_CLIENT_KEY       : TikTok app Client Key (for token refresh)
+    """
+    # Instagram Graph API credentials
+    instagram_access_token: str = ""   # Meta long-lived access token
+    instagram_user_id: str = ""        # IG Business account numeric ID
+
+    # TikTok Content Posting API credentials
+    tiktok_access_token: str = ""      # TikTok OAuth2 access token
+    tiktok_client_key: str = ""        # TikTok app client key
+
+    # Legacy per-account list (kept for the account-manager UI; not used for posting)
     instagram_accounts: List[Dict] = field(default_factory=lambda: [
-        {"username": "", "password": "", "api_key": "", "is_primary": True, "is_active": True},
-        {"username": "", "password": "", "api_key": "", "is_primary": False, "is_active": False},
-        {"username": "", "password": "", "api_key": "", "is_primary": False, "is_active": False}
+        {"username": "", "is_primary": True, "is_active": True},
     ])
-    
-    # TikTok
     tiktok_accounts: List[Dict] = field(default_factory=lambda: [
-        {"username": "", "password": "", "api_key": "", "is_primary": True, "is_active": True},
-        {"username": "", "password": "", "api_key": "", "is_primary": False, "is_active": False},
-        {"username": "", "password": "", "api_key": "", "is_primary": False, "is_active": False}
+        {"username": "", "is_primary": True, "is_active": True},
     ])
-    
+
     # Engagement settings
     auto_like: bool = True
     auto_comment: bool = True
@@ -96,6 +107,14 @@ class SocialMediaConfig:
     human_delay_min: int = 2
     human_delay_max: int = 8
     max_daily_actions: int = 100
+
+    @property
+    def instagram_configured(self) -> bool:
+        return bool(self.instagram_access_token and self.instagram_user_id)
+
+    @property
+    def tiktok_configured(self) -> bool:
+        return bool(self.tiktok_access_token)
 
 
 @dataclass
@@ -236,11 +255,18 @@ def load_config_from_env():
     # OpenAI
     config.openai.api_key = os.getenv("OPENAI_API_KEY", "")
     
-    # Social Media
-    for i, account in enumerate(config.social.instagram_accounts):
-        account["username"] = os.getenv(f"INSTAGRAM_USERNAME_{i}", "")
-        account["password"] = os.getenv(f"INSTAGRAM_PASSWORD_{i}", "")
-        account["api_key"] = os.getenv(f"INSTAGRAM_API_KEY_{i}", "")
+    # Social Media — Meta Graph API + TikTok Content Posting API
+    config.social.instagram_access_token = os.getenv("INSTAGRAM_ACCESS_TOKEN", "").strip()
+    config.social.instagram_user_id      = os.getenv("INSTAGRAM_USER_ID", "").strip()
+    config.social.tiktok_access_token    = os.getenv("TIKTOK_ACCESS_TOKEN", "").strip()
+    config.social.tiktok_client_key      = os.getenv("TIKTOK_CLIENT_KEY", "").strip()
+    # Usernames for display only
+    ig_username = os.getenv("INSTAGRAM_USERNAME_0", "")
+    tt_username = os.getenv("TIKTOK_USERNAME_0", "")
+    if ig_username:
+        config.social.instagram_accounts[0]["username"] = ig_username
+    if tt_username:
+        config.social.tiktok_accounts[0]["username"] = tt_username
     
     # Email
     config.fulfillment.smtp_host = os.getenv("SMTP_HOST", "")

@@ -347,6 +347,9 @@ class ConfigRequest(BaseModel):
     openai_api_key: str = ""
     printful_api_key: str = ""
     design_auto_approve: bool = False
+    instagram_access_token: str = ""
+    instagram_user_id: str = ""
+    tiktok_access_token: str = ""
 
 
 def _persist_config():
@@ -356,11 +359,14 @@ def _persist_config():
         _os.makedirs("/app/data", exist_ok=True)
         lines = []
         for key, val in [
-            ("SHOPIFY_SHOP_URL",     config.shopify.shop_url),
-            ("SHOPIFY_ACCESS_TOKEN", config.shopify.access_token),
-            ("OPENAI_API_KEY",       config.openai.api_key),
-            ("PRINTFUL_API_KEY",     config.printful.api_key),
-            ("DESIGN_AUTO_APPROVE",  str(config.design.auto_approve).lower()),
+            ("SHOPIFY_SHOP_URL",          config.shopify.shop_url),
+            ("SHOPIFY_ACCESS_TOKEN",      config.shopify.access_token),
+            ("OPENAI_API_KEY",            config.openai.api_key),
+            ("PRINTFUL_API_KEY",          config.printful.api_key),
+            ("DESIGN_AUTO_APPROVE",       str(config.design.auto_approve).lower()),
+            ("INSTAGRAM_ACCESS_TOKEN",    config.social.instagram_access_token),
+            ("INSTAGRAM_USER_ID",         config.social.instagram_user_id),
+            ("TIKTOK_ACCESS_TOKEN",       config.social.tiktok_access_token),
         ]:
             if val:
                 lines.append(f"{key}={val}\n")
@@ -715,11 +721,16 @@ async def get_profit_analytics():
 async def get_config_status():
     """Returns which fields are configured (booleans only — values never exposed)."""
     return {
-        "shopify_shop_url":       bool(config.shopify.shop_url),
-        "shopify_access_token":   bool(config.shopify.access_token),
-        "openai_api_key":         bool(config.openai.api_key),
-        "printful_api_key":       bool(config.printful.api_key),
-        "design_auto_approve":    config.design.auto_approve,
+        "shopify_shop_url":           bool(config.shopify.shop_url),
+        "shopify_access_token":       bool(config.shopify.access_token),
+        "openai_api_key":             bool(config.openai.api_key),
+        "printful_api_key":           bool(config.printful.api_key),
+        "design_auto_approve":        config.design.auto_approve,
+        "instagram_configured":       config.social.instagram_configured,
+        "tiktok_configured":          config.social.tiktok_configured,
+        "instagram_user_id_set":      bool(config.social.instagram_user_id),
+        "instagram_token_set":        bool(config.social.instagram_access_token),
+        "tiktok_token_set":           bool(config.social.tiktok_access_token),
     }
 
 
@@ -756,6 +767,16 @@ async def save_config_endpoint(request: ConfigRequest):
         _os.environ["PRINTFUL_API_KEY"] = key
 
     config.design.auto_approve = request.design_auto_approve
+
+    if request.instagram_access_token:
+        config.social.instagram_access_token = request.instagram_access_token.strip()
+        _os.environ["INSTAGRAM_ACCESS_TOKEN"] = config.social.instagram_access_token
+    if request.instagram_user_id:
+        config.social.instagram_user_id = request.instagram_user_id.strip()
+        _os.environ["INSTAGRAM_USER_ID"] = config.social.instagram_user_id
+    if request.tiktok_access_token:
+        config.social.tiktok_access_token = request.tiktok_access_token.strip()
+        _os.environ["TIKTOK_ACCESS_TOKEN"] = config.social.tiktok_access_token
 
     _persist_config()
 

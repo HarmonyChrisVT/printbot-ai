@@ -304,6 +304,11 @@ interface CfgStatus {
   openai_api_key: boolean;
   printful_api_key: boolean;
   design_auto_approve: boolean;
+  instagram_configured: boolean;
+  tiktok_configured: boolean;
+  instagram_user_id_set: boolean;
+  instagram_token_set: boolean;
+  tiktok_token_set: boolean;
 }
 
 function SetupForm({ onSaved }: { onSaved: () => void }) {
@@ -313,8 +318,11 @@ function SetupForm({ onSaved }: { onSaved: () => void }) {
     openai_api_key: '',
     printful_api_key: '',
     design_auto_approve: true,
+    instagram_access_token: '',
+    instagram_user_id: '',
+    tiktok_access_token: '',
   });
-  const [show, setShow] = useState({ shopify: false, openai: false, printful: false });
+  const [show, setShow] = useState({ shopify: false, openai: false, printful: false, instagram: false, tiktok: false });
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState<null | {
     status: string;
@@ -349,7 +357,11 @@ function SetupForm({ onSaved }: { onSaved: () => void }) {
       if (data.status === 'saved') {
         onSaved();
         fetch('/api/config/status').then(r => r.json()).then(setCfg).catch(() => {});
-        setForm(f => ({ ...f, shopify_access_token: '', openai_api_key: '', printful_api_key: '' }));
+        setForm(f => ({
+          ...f,
+          shopify_access_token: '', openai_api_key: '', printful_api_key: '',
+          instagram_access_token: '', tiktok_access_token: '',
+        }));
       }
     } catch {
       setResult({ status: 'error', shopify_test: null });
@@ -358,9 +370,11 @@ function SetupForm({ onSaved }: { onSaved: () => void }) {
     }
   }
 
-  const shopifyOk  = cfg?.shopify_shop_url && cfg?.shopify_access_token;
-  const openaiOk   = cfg?.openai_api_key;
-  const printfulOk = cfg?.printful_api_key;
+  const shopifyOk   = cfg?.shopify_shop_url && cfg?.shopify_access_token;
+  const openaiOk    = cfg?.openai_api_key;
+  const printfulOk  = cfg?.printful_api_key;
+  const instagramOk = cfg?.instagram_configured;
+  const tiktokOk    = cfg?.tiktok_configured;
 
   function Section({ ok, required, children }: { ok: boolean | undefined; required?: boolean; children: React.ReactNode }) {
     const border = ok ? 'border-green-300 bg-green-50/40' : required ? 'border-red-300 bg-red-50/40' : 'border-gray-200 bg-gray-50/30';
@@ -467,6 +481,55 @@ function SetupForm({ onSaved }: { onSaved: () => void }) {
               value={form.printful_api_key}
               onChange={v => setForm(f => ({ ...f, printful_api_key: v }))}
               showKey="printful"
+            />
+          </Section>
+
+          {/* Instagram */}
+          <Section ok={instagramOk}>
+            <div className="flex items-center justify-between">
+              <p className="font-semibold text-sm flex items-center gap-2"><Share2 className="w-4 h-4" /> Instagram (Meta Graph API)</p>
+              <Badge variant={instagramOk ? 'default' : 'secondary'} className="text-xs">
+                {instagramOk ? '✓ Configured' : 'Not Set'}
+              </Badge>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground block mb-1">Instagram User ID</label>
+              <input
+                type="text"
+                placeholder={cfg?.instagram_user_id_set ? 'already set — leave blank to keep' : '17841400000000000'}
+                value={form.instagram_user_id}
+                onChange={e => setForm(f => ({ ...f, instagram_user_id: e.target.value }))}
+                className="w-full px-3 py-2 border rounded-md text-sm bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Numeric IG Business/Creator account ID — find it at Meta for Developers → your app → Instagram → User Access Token
+              </p>
+            </div>
+            <FieldRow
+              label="Access Token"
+              placeholder={cfg?.instagram_token_set ? '••••• already set — leave blank to keep' : 'EAAxxxxxxxxxxxxxxx'}
+              value={form.instagram_access_token}
+              onChange={v => setForm(f => ({ ...f, instagram_access_token: v }))}
+              showKey="instagram"
+              note="Long-lived token (60 days) from Meta for Developers. Requires instagram_content_publish + instagram_basic scopes."
+            />
+          </Section>
+
+          {/* TikTok */}
+          <Section ok={tiktokOk}>
+            <div className="flex items-center justify-between">
+              <p className="font-semibold text-sm flex items-center gap-2"><Share2 className="w-4 h-4" /> TikTok (Content Posting API)</p>
+              <Badge variant={tiktokOk ? 'default' : 'secondary'} className="text-xs">
+                {tiktokOk ? '✓ Configured' : 'Not Set'}
+              </Badge>
+            </div>
+            <FieldRow
+              label="Access Token"
+              placeholder={cfg?.tiktok_token_set ? '••••• already set — leave blank to keep' : 'act.xxxxxxxxxxxxxxxx'}
+              value={form.tiktok_access_token}
+              onChange={v => setForm(f => ({ ...f, tiktok_access_token: v }))}
+              showKey="tiktok"
+              note="OAuth2 token from TikTok for Developers. Requires video.upload + video.publish scopes."
             />
           </Section>
 

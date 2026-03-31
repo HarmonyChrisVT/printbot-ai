@@ -1,467 +1,429 @@
 """
 PrintBot AI - Social Agent V2
 ==============================
-Enhanced social media with backup accounts and auto-switch
-Platforms: Instagram (3 accounts), TikTok (3 accounts)
-Human emulation: 20-120 second delays
+Real Instagram + TikTok posting via official APIs.
+
+Instagram: Meta Graph API (v21.0)
+  Requires: INSTAGRAM_ACCESS_TOKEN + INSTAGRAM_USER_ID
+  Flow: create media container → publish
+
+TikTok: TikTok Content Posting API v2
+  Requires: TIKTOK_ACCESS_TOKEN
+  Flow: POST /v2/post/publish/content/init/ with PHOTO media type
+
 Schedule: Every 6 hours
 """
 import asyncio
 import random
+import aiohttp
+import traceback
 from datetime import datetime, timedelta
-from typing import List, Dict, Optional, Tuple
-import json
-from dataclasses import dataclass
+from typing import List, Dict, Optional
+from urllib.parse import quote
 
 from config.settings import config
 from database.models import SocialPost, Product, AgentLog, get_session
 
+INSTAGRAM_GRAPH_BASE = "https://graph.facebook.com/v21.0"
+TIKTOK_API_BASE      = "https://open.tiktokapis.com/v2"
 
-@dataclass
-class AccountStatus:
-    """Social account status"""
-    platform: str
-    username: str
-    is_active: bool
-    is_primary: bool
-    is_banned: bool
-    last_post: datetime
-    daily_actions: int
-    failure_count: int
+# Fixed active-hour windows (UTC). Posts will only be created within these windows
+# to mimic real human behaviour. Agent still wakes up every 6 h to check.
+ACTIVE_HOURS_UTC = {8, 12, 14, 17, 19, 21}  # 8 am, noon, 2 pm, 5 pm, 7 pm, 9 pm
 
+
+# ── Human-like delays ────────────────────────────────────────────────────────
 
 class HumanEmulatorV2:
-    """Enhanced human behavior emulation"""
-    
-    def __init__(self):
-        # Updated delays: 20-120 seconds as requested
-        self.min_delay = 20
-        self.max_delay = 120
-        self.typing_wpm_range = (35, 55)  # Human typing speed
-        self.active_hours = self._generate_active_hours()
-    
-    async def random_delay(self, min_override: int = None, max_override: int = None):
-        """Wait for a random human-like duration (20-120 seconds)"""
-        min_d = min_override or self.min_delay
-        max_d = max_override or self.max_delay
-        delay = random.randint(min_d, max_d)
-        
-        # Add some randomness to feel more human
-        if random.random() < 0.1:  # 10% chance of longer delay
-            delay = int(delay * random.uniform(1.5, 2.5))
-        
+    async def random_delay(self, min_s: int = 5, max_s: int = 15):
+        delay = random.randint(min_s, max_s)
+        if random.random() < 0.1:
+            delay = int(delay * random.uniform(1.5, 2.0))
         print(f"⏱️  Human delay: {delay}s")
         await asyncio.sleep(delay)
-    
-    async def typing_delay(self, text: str):
-        """Simulate realistic typing time"""
-        wpm = random.randint(*self.typing_wpm_range)
-        chars_per_minute = wpm * 5  # Average word length
-        chars_per_second = chars_per_minute / 60
-        
-        # Add pauses for thinking
-        thinking_pauses = len(text) // 20  # Pause every ~20 chars
-        thinking_time = thinking_pauses * random.uniform(0.5, 2.0)
-        
-        typing_time = len(text) / chars_per_second
-        total_delay = typing_time + thinking_time
-        
-        await asyncio.sleep(total_delay)
-    
-    async def scroll_delay(self):
-        """Simulate scrolling pause"""
-        delay = random.uniform(2, 8)
-        await asyncio.sleep(delay)
-    
-    async def engagement_delay(self):
-        """Delay between engagement actions"""
-        # Shorter delays for likes/comments
-        delay = random.randint(10, 45)
-        await asyncio.sleep(delay)
-    
-    def _generate_active_hours(self) -> List[int]:
-        """Generate realistic active hours"""
-        # Peak social media hours with some randomness
-        peak_hours = [7, 8, 12, 13, 17, 18, 19, 20, 21, 22]
-        off_peak = [6, 9, 10, 11, 14, 15, 16, 23]
-        
-        # Randomly select hours
-        active = random.sample(peak_hours, k=random.randint(4, 7))
-        active.extend(random.sample(off_peak, k=random.randint(2, 4)))
-        
-        return sorted(set(active))
-    
-    def is_active_hour(self) -> bool:
-        """Check if current hour is an active hour"""
-        current_hour = datetime.utcnow().hour
-        return current_hour in self.active_hours
-    
-    def get_next_active_hour(self) -> int:
-        """Get next active hour"""
-        current_hour = datetime.utcnow().hour
-        for hour in self.active_hours:
-            if hour > current_hour:
-                return hour
-        return self.active_hours[0]  # Wrap to tomorrow
 
+    def is_active_hour(self) -> bool:
+        return datetime.utcnow().hour in ACTIVE_HOURS_UTC
+
+
+# ── Instagram Graph API ──────────────────────────────────────────────────────
+
+class InstagramAPI:
+    """
+    Posts images to Instagram via the Meta Graph API.
+
+    Required env vars:
+      INSTAGRAM_ACCESS_TOKEN  — long-lived token from Meta developer console
+      INSTAGRAM_USER_ID       — numeric IG Business/Creator account ID
+    """
+
+    def __init__(self):
+        self.token   = config.social.instagram_access_token
+        self.user_id = config.social.instagram_user_id
+
+    def _configured(self) -> bool:
+        if not self.token or not self.user_id:
+            print(
+                "⚠️  Instagram not configured — set INSTAGRAM_ACCESS_TOKEN "
+                "and INSTAGRAM_USER_ID in Railway environment variables."
+            )
+            return False
+        return True
+
+    async def post_image(self, image_url: str, caption: str) -> Optional[str]:
+        """
+        Two-step Meta Graph API flow:
+          1. POST /{user_id}/media        → creation_id
+          2. POST /{user_id}/media_publish → published post id
+        Returns the published post id on success, None on failure.
+        """
+        if not self._configured():
+            return None
+        if not image_url:
+            print("⚠️  Instagram: no image URL available — skipping post")
+            return None
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                # Step 1: create media container
+                create_url = f"{INSTAGRAM_GRAPH_BASE}/{self.user_id}/media"
+                create_params = {
+                    "image_url":    image_url,
+                    "caption":      caption,
+                    "access_token": self.token,
+                }
+                async with session.post(create_url, params=create_params, timeout=30) as resp:
+                    body = await resp.json()
+                    if resp.status != 200 or "id" not in body:
+                        print(f"❌ Instagram container creation failed ({resp.status}): {body}")
+                        return None
+                    creation_id = body["id"]
+                    print(f"📷 Instagram container created: {creation_id}")
+
+                # Step 2: publish
+                publish_url = f"{INSTAGRAM_GRAPH_BASE}/{self.user_id}/media_publish"
+                publish_params = {
+                    "creation_id":  creation_id,
+                    "access_token": self.token,
+                }
+                async with session.post(publish_url, params=publish_params, timeout=30) as resp:
+                    body = await resp.json()
+                    if resp.status != 200 or "id" not in body:
+                        print(f"❌ Instagram publish failed ({resp.status}): {body}")
+                        return None
+                    post_id = body["id"]
+                    print(f"✅ Instagram post published: {post_id}")
+                    return post_id
+
+        except Exception as e:
+            print(f"❌ Instagram API error: {e}")
+            print(traceback.format_exc())
+            return None
+
+
+# ── TikTok Content Posting API ───────────────────────────────────────────────
+
+class TikTokAPI:
+    """
+    Posts photo content to TikTok via the TikTok Content Posting API v2.
+
+    Required env vars:
+      TIKTOK_ACCESS_TOKEN  — OAuth2 token from TikTok for Developers app
+    """
+
+    def __init__(self):
+        self.token = config.social.tiktok_access_token
+
+    def _configured(self) -> bool:
+        if not self.token:
+            print(
+                "⚠️  TikTok not configured — set TIKTOK_ACCESS_TOKEN "
+                "in Railway environment variables."
+            )
+            return False
+        return True
+
+    async def post_photo(self, image_url: str, caption: str) -> Optional[str]:
+        """
+        POST to TikTok Content Posting API using PHOTO media type.
+        Returns publish_id on success, None on failure.
+        """
+        if not self._configured():
+            return None
+        if not image_url:
+            print("⚠️  TikTok: no image URL available — skipping post")
+            return None
+
+        url = f"{TIKTOK_API_BASE}/post/publish/content/init/"
+        headers = {
+            "Authorization": f"Bearer {self.token}",
+            "Content-Type": "application/json; charset=UTF-8",
+        }
+        payload = {
+            "post_info": {
+                "title":            caption[:150],  # TikTok caption limit
+                "privacy_level":    "FOLLOWER_OF_CREATOR",
+                "disable_comment":  False,
+                "disable_duet":     False,
+                "disable_stitch":   False,
+            },
+            "source_info": {
+                "source":             "PULL_FROM_URL",
+                "photo_cover_index":  0,
+                "photo_images":       [image_url],
+            },
+            "post_mode":  "DIRECT_POST",
+            "media_type": "PHOTO",
+        }
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.post(url, headers=headers, json=payload, timeout=30) as resp:
+                    body = await resp.json()
+                    if resp.status != 200:
+                        print(f"❌ TikTok post failed ({resp.status}): {body}")
+                        return None
+                    data = body.get("data", {})
+                    publish_id = data.get("publish_id")
+                    if not publish_id:
+                        print(f"❌ TikTok: no publish_id in response: {body}")
+                        return None
+                    print(f"✅ TikTok photo posted: {publish_id}")
+                    return publish_id
+
+        except Exception as e:
+            print(f"❌ TikTok API error: {e}")
+            print(traceback.format_exc())
+            return None
+
+
+# ── Account manager (display / failover tracking only) ───────────────────────
 
 class SocialAccountManager:
-    """Manages multiple social accounts with auto-failover"""
-    
     def __init__(self, platform: str, accounts_config: List[Dict]):
         self.platform = platform
-        self.accounts: List[AccountStatus] = []
-        self.current_account_index = 0
-        
-        # Initialize accounts from config
-        for i, acc_config in enumerate(accounts_config):
-            self.accounts.append(AccountStatus(
-                platform=platform,
-                username=acc_config.get('username', f'account_{i}'),
-                is_active=acc_config.get('is_active', False),
-                is_primary=acc_config.get('is_primary', i == 0),
-                is_banned=False,
-                last_post=None,
-                daily_actions=0,
-                failure_count=0
-            ))
-    
-    def get_active_account(self) -> Optional[AccountStatus]:
-        """Get the current active account"""
-        # Try primary first
-        for account in self.accounts:
-            if account.is_primary and account.is_active and not account.is_banned:
-                return account
-        
-        # Then try any active account
-        for account in self.accounts:
-            if account.is_active and not account.is_banned:
-                return account
-        
-        return None
-    
-    def get_backup_account(self) -> Optional[AccountStatus]:
-        """Get a backup account if primary fails"""
-        primary = self.get_active_account()
-        if not primary:
-            return None
-        
-        for account in self.accounts:
-            if account != primary and account.is_active and not account.is_banned:
-                return account
-        
-        return None
-    
-    def mark_account_failed(self, username: str):
-        """Mark an account as failed"""
-        for account in self.accounts:
-            if account.username == username:
-                account.failure_count += 1
-                if account.failure_count >= 3:
-                    account.is_banned = True
-                    print(f"🚫 Account @{username} marked as banned")
-                    
-                    # Switch to backup
-                    backup = self.get_backup_account()
-                    if backup:
-                        print(f"🔄 Switched to backup account @{backup.username}")
-                break
-    
-    def reset_daily_counters(self):
-        """Reset daily action counters"""
-        for account in self.accounts:
-            account.daily_actions = 0
-    
+        self.accounts = list(accounts_config)
+
+    def get_primary_username(self) -> str:
+        for acc in self.accounts:
+            if acc.get("is_primary"):
+                return acc.get("username", "")
+        return self.accounts[0].get("username", "") if self.accounts else ""
+
     def get_all_status(self) -> List[Dict]:
-        """Get status of all accounts"""
         return [
             {
-                'username': acc.username,
-                'is_active': acc.is_active,
-                'is_primary': acc.is_primary,
-                'is_banned': acc.is_banned,
-                'daily_actions': acc.daily_actions,
-                'failure_count': acc.failure_count
+                "username":    acc.get("username", ""),
+                "is_active":   acc.get("is_active", False),
+                "is_primary":  acc.get("is_primary", False),
             }
             for acc in self.accounts
         ]
 
 
-class InstagramAPIV2:
-    """Enhanced Instagram API with account switching"""
-    
-    def __init__(self, account_manager: SocialAccountManager):
-        self.account_manager = account_manager
-        self.human = HumanEmulatorV2()
-    
-    async def post_image(self, image_path: str, caption: str) -> Optional[str]:
-        """Post image with failover to backup accounts"""
-        account = self.account_manager.get_active_account()
-        if not account:
-            print("❌ No active Instagram accounts available")
-            return None
-        
-        try:
-            # Human-like delay before posting
-            await self.human.random_delay(30, 90)
-            
-            # Would use Instagram API here
-            print(f"📷 Posted to Instagram @{account.username}")
-            
-            account.last_post = datetime.utcnow()
-            account.daily_actions += 1
-            
-            return f"post_{datetime.utcnow().timestamp()}"
-            
-        except Exception as e:
-            print(f"❌ Instagram post failed: {e}")
-            self.account_manager.mark_account_failed(account.username)
-            
-            # Try backup account
-            backup = self.account_manager.get_backup_account()
-            if backup:
-                print(f"🔄 Retrying with backup @{backup.username}")
-                return await self.post_image(image_path, caption)
-            
-            return None
-    
-    async def like_post(self, post_id: str) -> bool:
-        """Like a post"""
-        await self.human.engagement_delay()
-        
-        account = self.account_manager.get_active_account()
-        if not account:
-            return False
-        
-        print(f"❤️ Liked post via @{account.username}")
-        account.daily_actions += 1
-        return True
-    
-    async def comment_on_post(self, post_id: str, comment: str) -> bool:
-        """Comment on a post"""
-        await self.human.typing_delay(comment)
-        await self.human.engagement_delay()
-        
-        account = self.account_manager.get_active_account()
-        if not account:
-            return False
-        
-        print(f"💬 Commented via @{account.username}")
-        account.daily_actions += 1
-        return True
-    
-    async def follow_user(self, user_id: str) -> bool:
-        """Follow a user"""
-        await self.human.random_delay(20, 60)
-        
-        account = self.account_manager.get_active_account()
-        if not account:
-            return False
-        
-        print(f"👤 Followed user via @{account.username}")
-        account.daily_actions += 1
-        return True
-
-
-class TikTokAPIV2:
-    """Enhanced TikTok API with account switching"""
-    
-    def __init__(self, account_manager: SocialAccountManager):
-        self.account_manager = account_manager
-        self.human = HumanEmulatorV2()
-    
-    async def post_video(self, video_path: str, caption: str) -> Optional[str]:
-        """Post video with failover"""
-        account = self.account_manager.get_active_account()
-        if not account:
-            print("❌ No active TikTok accounts available")
-            return None
-        
-        try:
-            await self.human.random_delay(45, 120)
-            
-            print(f"🎵 Posted to TikTok @{account.username}")
-            
-            account.last_post = datetime.utcnow()
-            account.daily_actions += 1
-            
-            return f"video_{datetime.utcnow().timestamp()}"
-            
-        except Exception as e:
-            print(f"❌ TikTok post failed: {e}")
-            self.account_manager.mark_account_failed(account.username)
-            
-            backup = self.account_manager.get_backup_account()
-            if backup:
-                return await self.post_video(video_path, caption)
-            
-            return None
-
+# ── Main Social Agent ─────────────────────────────────────────────────────────
 
 class SocialAgentV2:
     """
-    Enhanced Social Agent V2
-    Multi-account support with auto-failover
+    Social Agent — real Instagram + TikTok posting.
+    Runs a full cycle every 6 hours during UTC active hours.
     """
-    
+
     def __init__(self, db_session):
         self.session = db_session
-        self.human = HumanEmulatorV2()
-        
-        # Initialize account managers
+        self.human   = HumanEmulatorV2()
+
         self.instagram_manager = SocialAccountManager(
-            'instagram',
-            config.social.instagram_accounts
+            "instagram", config.social.instagram_accounts
         )
         self.tiktok_manager = SocialAccountManager(
-            'tiktok',
-            config.social.tiktok_accounts
+            "tiktok", config.social.tiktok_accounts
         )
-        
-        # Initialize APIs
-        self.instagram = InstagramAPIV2(self.instagram_manager)
-        self.tiktok = TikTokAPIV2(self.tiktok_manager)
-        
-        self.running = False
+
+        self.instagram = InstagramAPI()
+        self.tiktok    = TikTokAPI()
+        self.running   = False
         self.last_reset = datetime.utcnow()
-    
+
     async def run(self):
-        """Main agent loop"""
         self.running = True
         print("📱 Social Agent V2 started")
-        print(f"   Instagram accounts: {len(self.instagram_manager.accounts)}")
-        print(f"   TikTok accounts: {len(self.tiktok_manager.accounts)}")
-        
+        print(f"   Instagram configured: {config.social.instagram_configured}")
+        print(f"   TikTok configured:    {config.social.tiktok_configured}")
+
+        if not config.social.instagram_configured and not config.social.tiktok_configured:
+            print(
+                "⚠️  Social Agent: neither Instagram nor TikTok credentials are set.\n"
+                "   Add INSTAGRAM_ACCESS_TOKEN + INSTAGRAM_USER_ID (and/or TIKTOK_ACCESS_TOKEN)\n"
+                "   to Railway environment variables, then redeploy."
+            )
+
         while self.running:
             try:
-                # Reset daily counters
+                # Reset daily counters at midnight
                 if datetime.utcnow() - self.last_reset > timedelta(days=1):
-                    self.instagram_manager.reset_daily_counters()
-                    self.tiktok_manager.reset_daily_counters()
                     self.last_reset = datetime.utcnow()
-                
-                # Only post during active hours
+
                 if self.human.is_active_hour():
                     await self._process_cycle()
                 else:
-                    next_hour = self.human.get_next_active_hour()
-                    print(f"⏳ Waiting for active hour ({next_hour}:00)")
-                
-                await asyncio.sleep(6 * 3600)  # Every 6 hours
-                
+                    current_h = datetime.utcnow().hour
+                    next_h = min((h for h in sorted(ACTIVE_HOURS_UTC) if h > current_h),
+                                 default=min(ACTIVE_HOURS_UTC))
+                    print(f"⏳ Social Agent: outside active hours (current={current_h}h UTC), "
+                          f"next window at {next_h}h UTC")
+
+                await asyncio.sleep(6 * 3600)
+
             except Exception as e:
-                self._log_error(f"Social agent error: {e}")
+                self._log_action("run_error", "error", {"message": str(e), "trace": traceback.format_exc()})
                 await asyncio.sleep(600)
-    
+
     async def _process_cycle(self):
-        """Process one social media cycle"""
-        print("📱 Running social media cycle...")
-        
-        # 1. Create posts
+        print("📱 Social Agent: running posting cycle…")
         await self._create_posts()
-        
-        # 2. Engage with audience
-        await self._engage_with_audience()
-        
-        # 3. Growth activities
-        await self._growth_activities()
-        
-        print("📱 Social cycle complete")
-    
+        print("📱 Social Agent: cycle complete")
+
     async def _create_posts(self):
-        """Create new social media posts"""
-        products = self.session.query(Product).filter(
-            Product.is_active == True,
-            Product.is_approved == True
-        ).order_by(Product.updated_at.desc()).limit(5).all()
-        
+        """Post each un-posted approved product to Instagram and TikTok."""
+        products = (
+            self.session.query(Product)
+            .filter(Product.is_active == True, Product.is_approved == True)
+            .order_by(Product.updated_at.desc())
+            .limit(5)
+            .all()
+        )
+
+        if not products:
+            print("📱 Social Agent: no approved products to post yet")
+            self._log_action("create_posts", "warning", {"message": "no approved products"})
+            return
+
         for product in products:
-            # Check if already posted
-            recent_post = self.session.query(SocialPost).filter(
+            # Skip products posted to either platform in the last 7 days
+            recent = self.session.query(SocialPost).filter(
                 SocialPost.product_id == product.id,
-                SocialPost.posted_at >= datetime.utcnow() - timedelta(days=7)
+                SocialPost.posted_at >= datetime.utcnow() - timedelta(days=7),
             ).first()
-            
-            if recent_post:
+            if recent:
                 continue
-            
-            # Generate caption
+
+            # Use Shopify CDN URL if available (permanent), else fall back to design_url
+            image_url = product.design_url or ""
+            if not image_url:
+                print(f"⚠️  Product '{product.title}' has no image URL — skipping")
+                continue
+
             caption = self._generate_caption(product)
-            
-            # Post to Instagram (with auto-failover)
-            post_id = await self.instagram.post_image(product.design_url, caption)
-            
-            if post_id:
-                social_post = SocialPost(
-                    platform='instagram',
-                    account_username=self.instagram_manager.get_active_account().username,
-                    content_type='image',
-                    caption=caption,
-                    product_id=product.id,
-                    status='posted',
-                    posted_at=datetime.utcnow(),
-                    external_post_id=post_id
-                )
-                self.session.add(social_post)
-                self.session.commit()
-    
+
+            # ── Instagram ────────────────────────────────────────────────────
+            if config.social.instagram_configured:
+                await self.human.random_delay(5, 15)
+                ig_post_id = await self.instagram.post_image(image_url, caption)
+                if ig_post_id:
+                    self._save_post(product, "instagram",
+                                    self.instagram_manager.get_primary_username(),
+                                    caption, ig_post_id)
+                    self._log_action("instagram_post", "success", {
+                        "product_id": product.id,
+                        "product_title": product.title,
+                        "post_id": ig_post_id,
+                    })
+                else:
+                    self._log_action("instagram_post", "error", {
+                        "product_id": product.id,
+                        "product_title": product.title,
+                        "image_url": image_url,
+                        "error": "Instagram API returned None — check token/user_id and image URL",
+                    })
+            else:
+                self._log_action("instagram_post", "warning",
+                                 {"message": "INSTAGRAM_ACCESS_TOKEN or INSTAGRAM_USER_ID not set"})
+
+            # ── TikTok ───────────────────────────────────────────────────────
+            if config.social.tiktok_configured:
+                await self.human.random_delay(5, 15)
+                tt_post_id = await self.tiktok.post_photo(image_url, caption)
+                if tt_post_id:
+                    self._save_post(product, "tiktok",
+                                    self.tiktok_manager.get_primary_username(),
+                                    caption, tt_post_id)
+                    self._log_action("tiktok_post", "success", {
+                        "product_id": product.id,
+                        "product_title": product.title,
+                        "publish_id": tt_post_id,
+                    })
+                else:
+                    self._log_action("tiktok_post", "error", {
+                        "product_id": product.id,
+                        "product_title": product.title,
+                        "image_url": image_url,
+                        "error": "TikTok API returned None — check TIKTOK_ACCESS_TOKEN",
+                    })
+            else:
+                self._log_action("tiktok_post", "warning",
+                                 {"message": "TIKTOK_ACCESS_TOKEN not set"})
+
     def _generate_caption(self, product: Product) -> str:
-        """Generate social media caption"""
         templates = [
-            f"✨ {product.title} - Perfect for any occasion!\n\nShop now - link in bio! 👆\n\n#trending #fashion #style",
-            f"🔥 New arrival: {product.title}\n\nLimited stock - grab yours!\n\n#newdrop #musthave",
-            f"💫 Obsessed with this {product.product_type or 'design'}!\n\nWhat do you think? 👇\n\n#ootd #aesthetic"
+            f"✨ {product.title}\n\nShop now — link in bio! 👆\n\n#trending #fashion #style #printOnDemand",
+            f"🔥 New drop: {product.title}\n\nGrab yours before it's gone!\n\n#newdrop #musthave #tshirt",
+            f"💫 Loving this {product.product_type or 'design'}!\n\nWhat do you think? 👇\n\n#ootd #aesthetic #custom",
         ]
         return random.choice(templates)
-    
-    async def _engage_with_audience(self):
-        """Engage with audience"""
-        # Like posts
-        for _ in range(random.randint(5, 15)):
-            await self.instagram.like_post(f"post_{random.randint(1000, 9999)}")
-            await self.human.engagement_delay()
-    
-    async def _growth_activities(self):
-        """Growth-focused activities"""
-        # Follow users
-        for _ in range(random.randint(3, 8)):
-            await self.instagram.follow_user(f"user_{random.randint(1000, 9999)}")
-            await self.human.random_delay(30, 90)
-    
-    def get_account_status(self) -> Dict:
-        """Get status of all accounts"""
-        return {
-            'instagram': self.instagram_manager.get_all_status(),
-            'tiktok': self.tiktok_manager.get_all_status()
-        }
-    
-    def _log_error(self, message: str):
-        """Log error"""
+
+    def _save_post(self, product: Product, platform: str,
+                   username: str, caption: str, post_id: str):
+        post = SocialPost(
+            platform=platform,
+            account_username=username,
+            content_type="image",
+            caption=caption,
+            product_id=product.id,
+            product_url=f"https://{config.shopify.shop_url}/products/{product.shopify_id}"
+                        if product.shopify_id else None,
+            status="posted",
+            posted_at=datetime.utcnow(),
+            external_post_id=post_id,
+        )
+        self.session.add(post)
+        self.session.commit()
+
+    def _log_action(self, action: str, status: str, details: dict):
         log = AgentLog(
-            agent_name='social_v2',
-            action='error',
-            status='error',
-            details={'message': message}
+            agent_name="social",   # use 'social' so health monitor queries find it
+            action=action,
+            status=status,
+            details=details,
         )
         self.session.add(log)
         self.session.commit()
-        print(f"❌ {message}")
-    
+        if status == "error":
+            print(f"❌ Social Agent [{action}]: {details}")
+
+    def get_account_status(self) -> Dict:
+        return {
+            "instagram": {
+                "configured": config.social.instagram_configured,
+                "user_id": config.social.instagram_user_id or "not set",
+                "accounts": self.instagram_manager.get_all_status(),
+            },
+            "tiktok": {
+                "configured": config.social.tiktok_configured,
+                "accounts": self.tiktok_manager.get_all_status(),
+            },
+        }
+
     def stop(self):
-        """Stop the agent"""
         self.running = False
         print("🛑 Social Agent V2 stopped")
 
 
 # Standalone run
 async def run_social_agent_v2():
-    """Run social agent v2 standalone"""
     from database.models import init_database
-    from config.settings import config
-    
     engine = init_database(config.database_path)
     session = get_session(engine)
-    
     agent = SocialAgentV2(session)
     await agent.run()
 
