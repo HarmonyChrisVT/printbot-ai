@@ -1049,13 +1049,11 @@ function App() {
               <StatCard
                 title="Today's Revenue"
                 value={`$${analytics.today.revenue.toFixed(2)}`}
-                change="+12% from yesterday"
                 icon={DollarSign}
               />
               <StatCard
                 title="Today's Orders"
                 value={analytics.today.orders.toString()}
-                change="+3 new today"
                 icon={Package}
               />
               <StatCard

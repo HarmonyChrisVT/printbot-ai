@@ -402,9 +402,14 @@ async def get_status():
         return orchestrator.get_status()
     # Orchestrator not yet started — still return live config so the
     # dashboard shows the correct connected/disconnected state.
+    _known_agents = [
+        'design', 'pricing', 'social', 'fulfillment', 'b2b',
+        'customer_engagement', 'competitor_spy', 'affiliate',
+        'inventory_prediction',
+    ]
     return {
         "running": False,
-        "agents": {},
+        "agents": {name: {"running": False, "last_activity": "not started"} for name in _known_agents},
         "config": {
             "shopify":  config.shopify.is_configured,
             "printful": config.printful.is_configured,
