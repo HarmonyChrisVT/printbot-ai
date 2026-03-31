@@ -45,6 +45,23 @@ class MasterOrchestrator:
 
     EVAL_INTERVAL = 300  # seconds between evaluations
 
+    # Expected maximum idle time per agent before it's considered stuck (seconds).
+    # If an agent has no log entry newer than this, the orchestrator will reassign
+    # it a high-priority task from the current mode's queue.
+    AGENT_IDLE_TIMEOUT: Dict[str, int] = {
+        "design":               1800 * 2,   # 30-min interval × 2
+        "pricing":              7200 * 2,   # 2-hr interval × 2
+        "social":               21600 * 2,  # 6-hr interval × 2
+        "fulfillment":          300 * 3,    # 5-min interval × 3
+        "b2b":                  3600 * 2,
+        "customer_engagement":  3600 * 2,
+        "competitor_spy":       7200 * 2,
+        "affiliate":            86400 * 2,
+        "content_writer":       1800 * 2,
+        "customer_service":     60 * 3,
+        "inventory_prediction": 86400 * 2,
+    }
+
     # ── Priority queues per mode (front = highest priority) ───────────────────
     PRIORITY_QUEUES: Dict[SystemMode, List[str]] = {
         SystemMode.DESIGN_MODE: [
@@ -206,6 +223,9 @@ class MasterOrchestrator:
         # Set collaboration task descriptions
         for agent, task in self.COLLABORATION_TASKS.get(new_mode, {}).items():
             self.bus.set_collaboration(agent, task)
+
+        # Detect idle agents and reassign them work
+        self._reassign_idle_agents(new_mode)
 
         # Decide and log
         decision = {
@@ -429,6 +449,77 @@ class MasterOrchestrator:
         self.bus.publish("master", "revenue",             round(m.total_revenue, 2))
         self.bus.publish("master", "current_mode",        str(self.current_mode))
         self.bus.publish("master", "fulfillment_backlog", m.fulfillment_backlog)
+
+    # ── Idle agent detection & reassignment ──────────────────────────────────
+
+    def _reassign_idle_agents(self, mode: SystemMode):
+        """
+        Check every running agent's last AgentLog entry.
+        If an agent hasn't logged anything within its AGENT_IDLE_TIMEOUT window,
+        flag it as idle, increase its interval multiplier to 0.1 (run ASAP),
+        and emit a directive to the bus so the agent picks up work immediately.
+        """
+        now = datetime.utcnow()
+        queue = self.PRIORITY_QUEUES[mode]
+        idle_agents = []
+
+        for agent_name, agent_obj in self.agents.items():
+            if not agent_obj.running:
+                continue  # stopped agents are not "idle"
+
+            timeout = self.AGENT_IDLE_TIMEOUT.get(agent_name, 3600)
+
+            try:
+                last_log = (
+                    self.session.query(AgentLog)
+                    .filter(AgentLog.agent_name == agent_name)
+                    .order_by(AgentLog.created_at.desc())
+                    .first()
+                )
+                last_active = last_log.created_at if last_log else None
+            except Exception as e:
+                logger.debug(f"Idle check: DB error for {agent_name}: {e}")
+                last_active = None
+
+            if last_active is None or (now - last_active).total_seconds() > timeout:
+                idle_agents.append(agent_name)
+                priority = queue.index(agent_name) if agent_name in queue else 99
+                # Push interval multiplier close to 0 so the agent's next sleep
+                # expires immediately and it runs its next cycle without waiting
+                self.bus.set_override(
+                    agent_name,
+                    interval_multiplier=0.1,
+                    priority=priority,
+                    mode=str(mode),
+                )
+                self.bus.set_collaboration(
+                    agent_name,
+                    f"[REASSIGNED — idle > {timeout//60}m] "
+                    + self.COLLABORATION_TASKS.get(mode, {}).get(agent_name, "Execute primary task"),
+                )
+                self.bus.emit_flow(
+                    "master_orchestrator",
+                    agent_name,
+                    f"IDLE ALERT: {agent_name} has been inactive for >{timeout//60} min — "
+                    f"resuming immediately under {mode} mode",
+                    {"idle_agent": agent_name, "timeout_min": timeout // 60},
+                )
+                elapsed = int((now - last_active).total_seconds() // 60) if last_active else "never"
+                logger.warning(
+                    f"MasterOrchestrator: {agent_name} IDLE (last active: {elapsed} min ago) — reassigned"
+                )
+                print(
+                    f"♻️  Orchestrator: {agent_name} idle ({elapsed} min) — reassigning under {mode}"
+                )
+
+        if idle_agents:
+            self.bus.publish("master", "idle_agents", idle_agents)
+            self._log_system_event(
+                f"Idle agents reassigned: {', '.join(idle_agents)}",
+                severity="warning",
+            )
+        else:
+            self.bus.publish("master", "idle_agents", [])
 
     # ── DB logging ────────────────────────────────────────────────────────────
 

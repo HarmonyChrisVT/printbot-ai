@@ -136,7 +136,7 @@ class ShopifyAPI:
                             return await response.json()
                         else:
                             body = await response.text()
-                            print(f"❌ Shopify API error {response.status} on {endpoint}: {body[:200]}")
+                            print(f"❌ Shopify API error {response.status} on {endpoint}: {body}")
                             return None
 
                 elif method == 'PUT':
@@ -176,36 +176,54 @@ class ShopifyAPI:
     async def create_product(self, product_data: Dict) -> Optional[Dict]:
         """Create a new product"""
         endpoint = '/products.json'
-        
+
+        # Shopify REST API requires tags as a comma-separated string, not a list
+        raw_tags = product_data.get('tags', [])
+        tags_str = ', '.join(raw_tags) if isinstance(raw_tags, list) else (raw_tags or '')
+
+        # Preserve variant order for options (set() loses ordering)
+        seen: set = set()
+        ordered_sizes = []
+        for v in product_data.get('variants', [{}]):
+            s = v.get('size', 'Default')
+            if s not in seen:
+                seen.add(s)
+                ordered_sizes.append(s)
+
+        # Build images list — prefer base64 attachment (more reliable than
+        # temporary DALL-E URLs which expire after ~1 hour)
+        if product_data.get('image_attachment'):
+            images = [{'attachment': product_data['image_attachment']}]
+        else:
+            images = [{'src': url} for url in product_data.get('image_urls', []) if url]
+
         data = {
             'product': {
                 'title': product_data.get('title'),
                 'body_html': product_data.get('description'),
                 'vendor': product_data.get('vendor', 'PrintBot AI'),
                 'product_type': product_data.get('product_type'),
-                'tags': product_data.get('tags', []),
+                'tags': tags_str,
                 'variants': [
                     {
                         'option1': variant.get('size', 'Default'),
                         'price': str(variant.get('price', 0)),
                         'sku': variant.get('sku'),
-                        'inventory_quantity': variant.get('inventory', 100)
+                        'inventory_management': None,  # print-on-demand = no tracking
                     }
                     for variant in product_data.get('variants', [{}])
                 ],
                 'options': [
                     {
                         'name': 'Size',
-                        'values': list(set(v.get('size', 'Default') for v in product_data.get('variants', [{}])))
+                        'values': ordered_sizes,
                     }
                 ],
-                'images': [
-                    {'src': url}
-                    for url in product_data.get('image_urls', [])
-                ]
+                'images': images,
             }
         }
-        
+
+        print(f"📦 Creating Shopify product: '{data['product']['title']}' | tags='{tags_str}' | images={len(images)}")
         response = await self._request('POST', endpoint, data)
         return response.get('product') if response else None
     

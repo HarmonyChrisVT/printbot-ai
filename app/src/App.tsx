@@ -519,133 +519,67 @@ function SetupForm({ onSaved }: { onSaved: () => void }) {
   );
 }
 
-// Agent definitions: icon, color, description, detail rows
+// Agent definitions: icon, color, description only — no fake operational data.
+// Real stats are fetched from /api/agents/stats and injected at render time.
 const agentConfig: Record<string, {
   icon: any;
   color: string;
   description: string;
-  details: { label: string; value: string }[];
 }> = {
   design: {
     icon: Palette,
     color: 'bg-gradient-to-br from-pink-500 to-rose-500',
     description: 'Scans trends and generates AI designs every 30 minutes',
-    details: [
-      { label: 'Daily Limit', value: '2 / 3 designs' },
-      { label: 'Trend Sources', value: '4 active' },
-      { label: 'Auto-Approve', value: 'Off' },
-      { label: 'Next Scan', value: '18 minutes' },
-    ],
   },
   pricing: {
     icon: DollarSign,
     color: 'bg-gradient-to-br from-green-500 to-emerald-500',
     description: 'Monitors competitors and adjusts prices every 2 hours',
-    details: [
-      { label: 'Anchor Margin', value: '40%' },
-      { label: 'Floor Margin', value: '25%' },
-      { label: 'Competitors', value: '5 tracked' },
-      { label: 'Charm Pricing', value: 'Enabled' },
-    ],
   },
   social: {
     icon: Share2,
     color: 'bg-gradient-to-br from-blue-500 to-cyan-500',
     description: 'Manages Instagram & TikTok presence every 6 hours',
-    details: [
-      { label: 'Daily Actions', value: '45 / 100' },
-      { label: 'Instagram Accounts', value: '3 configured' },
-      { label: 'TikTok Accounts', value: '3 configured' },
-      { label: 'Auto-Like', value: 'Enabled' },
-    ],
   },
   fulfillment: {
     icon: Package,
     color: 'bg-gradient-to-br from-orange-500 to-amber-500',
     description: 'Processes orders via Printful every 5 minutes',
-    details: [
-      { label: 'Pending Orders', value: '2 orders' },
-      { label: 'Provider', value: 'Printful' },
-      { label: 'Backup', value: 'Printify' },
-      { label: 'Auto-Tracking', value: 'Enabled' },
-    ],
   },
   b2b: {
     icon: Briefcase,
     color: 'bg-gradient-to-br from-violet-500 to-purple-500',
     description: 'Identifies and contacts wholesale & bulk order leads',
-    details: [
-      { label: 'Leads Contacted', value: '8 today' },
-      { label: 'Active Deals', value: '3 in progress' },
-      { label: 'Min Order Qty', value: '10 units' },
-      { label: 'Wholesale Discount', value: '20%' },
-    ],
   },
   content_writer: {
     icon: FileText,
     color: 'bg-gradient-to-br from-teal-500 to-green-500',
     description: 'Generates SEO-optimized product titles and descriptions',
-    details: [
-      { label: 'Descriptions Written', value: '14 today' },
-      { label: 'A/B Tests Active', value: '3 running' },
-      { label: 'SEO Optimizer', value: 'Enabled' },
-      { label: 'Model', value: 'GPT-4' },
-    ],
   },
   competitor_spy: {
     icon: Eye,
     color: 'bg-gradient-to-br from-slate-500 to-gray-600',
     description: 'Tracks competitor pricing and product launches',
-    details: [
-      { label: 'Competitors Tracked', value: '5 stores' },
-      { label: 'Price Changes', value: '7 today' },
-      { label: 'Alerts Triggered', value: '2 today' },
-      { label: 'Scan Interval', value: 'Every 2 hours' },
-    ],
   },
   inventory_prediction: {
     icon: BarChart2,
     color: 'bg-gradient-to-br from-indigo-500 to-blue-600',
     description: 'Predicts stock needs and triggers restock alerts',
-    details: [
-      { label: 'Products Analyzed', value: '32 SKUs' },
-      { label: 'Restock Alerts', value: '4 active' },
-      { label: 'Forecast Accuracy', value: '87%' },
-      { label: 'Lookback Window', value: '90 days' },
-    ],
   },
   customer_service: {
     icon: MessageSquare,
     color: 'bg-gradient-to-br from-sky-500 to-blue-500',
     description: 'Handles customer inquiries and support tickets automatically',
-    details: [
-      { label: 'Tickets Handled', value: '11 today' },
-      { label: 'Avg Response Time', value: '42 seconds' },
-      { label: 'Satisfaction Rate', value: '94%' },
-      { label: 'Escalations', value: '1 today' },
-    ],
   },
   affiliate: {
     icon: Users,
     color: 'bg-gradient-to-br from-rose-500 to-pink-600',
     description: 'Manages affiliate partners and tracks commissions',
-    details: [
-      { label: 'Active Affiliates', value: '12 partners' },
-      { label: 'Clicks Today', value: '340' },
-      { label: 'Commissions Earned', value: '$28 today' },
-      { label: 'Commission Rate', value: '10%' },
-    ],
   },
   customer_engagement: {
     icon: Heart,
     color: 'bg-gradient-to-br from-fuchsia-500 to-pink-500',
     description: 'Runs email campaigns and re-engagement sequences',
-    details: [
-      { label: 'Emails Sent', value: '45 today' },
-      { label: 'Open Rate', value: '38%' },
-      { label: 'Active Campaigns', value: '2 running' },
-      { label: 'Unsubscribe Rate', value: '0.4%' },
-    ],
   },
 };
 
@@ -924,16 +858,19 @@ function App() {
     week:  { orders: 0, revenue: 0, profit: 0 },
   });
   const [orchestrator, setOrchestrator] = useState<OrchestratorStatus>(defaultOrchestrator);
+  // Real per-agent stats from /api/agents/stats — every value comes from the DB
+  const [agentDbStats, setAgentDbStats] = useState<Record<string, Record<string, string>>>({});
   const [activeTab, setActiveTab] = useState('dashboard');
   const [apiConnected, setApiConnected] = useState(true);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [statusRes, analyticsRes, orchRes] = await Promise.all([
+        const [statusRes, analyticsRes, orchRes, statsRes] = await Promise.all([
           fetch('/api/status'),
           fetch('/api/analytics'),
           fetch('/api/orchestrator'),
+          fetch('/api/agents/stats'),
         ]);
         if (statusRes.ok) {
           const data = await statusRes.json();
@@ -952,6 +889,10 @@ function App() {
         if (orchRes.ok) {
           const data = await orchRes.json();
           if (!data.error) setOrchestrator(data as OrchestratorStatus);
+        }
+        if (statsRes.ok) {
+          const data = await statsRes.json();
+          setAgentDbStats(data);
         }
       } catch {
         setApiConnected(false);
@@ -1068,16 +1009,21 @@ function App() {
               />
             </div>
 
-            {/* Agents Grid — all 11 */}
+            {/* Agents Grid — all 11, real stats from /api/agents/stats */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {agentKeys.map((key) => {
                 const agent = status.agents[key];
                 const cfg = agentConfig[key];
                 if (!agent || !cfg) return null;
+                // Merge real DB stats into the agent object so AgentCard shows them
+                const agentWithStats: AgentStatus = {
+                  ...agent,
+                  stats: agentDbStats[key] ?? {},
+                };
                 return (
                   <AgentCard
                     key={key}
-                    agent={agent}
+                    agent={agentWithStats}
                     icon={cfg.icon}
                     color={cfg.color}
                   />
@@ -1153,12 +1099,17 @@ function App() {
                     </CardHeader>
                     <CardContent>
                       <div className="grid grid-cols-2 gap-3 text-sm">
-                        {cfg.details.map((d) => (
-                          <div key={d.label}>
-                            <p className="text-muted-foreground">{d.label}</p>
-                            <p className="font-medium">{d.value}</p>
+                        {Object.entries(agentDbStats[key] ?? {}).map(([label, value]) => (
+                          <div key={label}>
+                            <p className="text-muted-foreground">{label}</p>
+                            <p className="font-medium">{value}</p>
                           </div>
                         ))}
+                        {Object.keys(agentDbStats[key] ?? {}).length === 0 && (
+                          <p className="text-xs text-muted-foreground col-span-2">
+                            Stats loading…
+                          </p>
+                        )}
                       </div>
                     </CardContent>
                   </Card>
@@ -1222,52 +1173,30 @@ function App() {
                   <div className="space-y-3">
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Avg Order Value</span>
-                      <span className="font-medium">$49.59</span>
+                      <span className="font-medium">
+                        {analytics.week.orders > 0
+                          ? `$${(analytics.week.revenue / analytics.week.orders).toFixed(2)}`
+                          : '$0.00'}
+                      </span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Profit Margin</span>
-                      <span className="font-medium">36%</span>
+                      <span className="font-medium">
+                        {analytics.week.revenue > 0
+                          ? `${((analytics.week.profit / analytics.week.revenue) * 100).toFixed(1)}%`
+                          : '0%'}
+                      </span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground">Engagement Rate</span>
-                      <span className="font-medium">4.2%</span>
+                      <span className="text-muted-foreground">Designs This Week</span>
+                      <span className="font-medium">{analytics.today.designs}</span>
                     </div>
                   </div>
                 </CardContent>
               </Card>
             </div>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Recent Activity Log</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ScrollArea className="h-64">
-                  <div className="space-y-2">
-                    {[
-                      { time: '2 min ago', agent: 'Design', action: 'Generated design: "Monday Motivation"', status: 'success' },
-                      { time: '5 min ago', agent: 'Customer Service', action: 'Resolved ticket #482: shipping inquiry', status: 'success' },
-                      { time: '5 min ago', agent: 'Fulfillment', action: 'Order #1024 shipped', status: 'success' },
-                      { time: '10 min ago', agent: 'Engagement', action: 'Sent re-engagement campaign to 45 customers', status: 'success' },
-                      { time: '15 min ago', agent: 'Pricing', action: 'Updated 12 product prices', status: 'success' },
-                      { time: '20 min ago', agent: 'Content Writer', action: 'Wrote descriptions for 14 products', status: 'success' },
-                      { time: '45 min ago', agent: 'B2B', action: 'Contacted 8 wholesale leads', status: 'success' },
-                      { time: '1 hour ago', agent: 'Social', action: 'Posted to Instagram @printbot_main', status: 'success' },
-                      { time: '1 hour ago', agent: 'Affiliate', action: '340 affiliate clicks tracked', status: 'success' },
-                      { time: '2 hours ago', agent: 'Competitor Spy', action: '7 competitor price changes detected', status: 'success' },
-                      { time: '3 hours ago', agent: 'Inventory', action: '4 restock alerts triggered', status: 'success' },
-                    ].map((log, i) => (
-                      <div key={i} className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted">
-                        <div className={`w-2 h-2 rounded-full ${log.status === 'success' ? 'bg-green-500' : 'bg-red-500'}`} />
-                        <span className="text-xs text-muted-foreground w-20 shrink-0">{log.time}</span>
-                        <Badge variant="outline" className="text-xs shrink-0">{log.agent}</Badge>
-                        <span className="text-sm">{log.action}</span>
-                      </div>
-                    ))}
-                  </div>
-                </ScrollArea>
-              </CardContent>
-            </Card>
+            <OrchestratorDecisionsLog decisions={orchestrator.recent_decisions} />
           </TabsContent>
 
           {/* Configuration Tab */}

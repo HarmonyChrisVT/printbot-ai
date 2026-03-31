@@ -381,6 +381,7 @@ class DesignAgent:
 
     async def _create_product_from_design(self, design: Design):
         """Create a product in Shopify and the local database from an approved design"""
+        import base64
         from integrations.shopify import ShopifyAPI
 
         keyword = (design.trend_keywords[0] if design.trend_keywords else 'New Design')
@@ -393,22 +394,41 @@ class DesignAgent:
             'description': description,
             'product_type': 'T-Shirt',
             'tags': design.trend_keywords or [],
-            'image_urls': [design.image_url] if design.image_url else [],
             'variants': [
-                {'size': 'S',  'price': base_price,      'sku': f'SKU-{design.id}-S',  'inventory': 100},
-                {'size': 'M',  'price': base_price,      'sku': f'SKU-{design.id}-M',  'inventory': 100},
-                {'size': 'L',  'price': base_price,      'sku': f'SKU-{design.id}-L',  'inventory': 100},
-                {'size': 'XL', 'price': base_price + 2,  'sku': f'SKU-{design.id}-XL', 'inventory': 100},
-                {'size': '2XL','price': base_price + 2,  'sku': f'SKU-{design.id}-2XL','inventory': 100},
+                {'size': 'S',  'price': base_price,      'sku': f'SKU-{design.id}-S'},
+                {'size': 'M',  'price': base_price,      'sku': f'SKU-{design.id}-M'},
+                {'size': 'L',  'price': base_price,      'sku': f'SKU-{design.id}-L'},
+                {'size': 'XL', 'price': base_price + 2,  'sku': f'SKU-{design.id}-XL'},
+                {'size': '2XL','price': base_price + 2,  'sku': f'SKU-{design.id}-2XL'},
             ]
         }
+
+        # Prefer base64 attachment from the downloaded local file — DALL-E URLs
+        # expire after ~1 hour and cannot be fetched by Shopify's servers reliably.
+        if design.local_path and Path(design.local_path).exists():
+            try:
+                with open(design.local_path, 'rb') as f:
+                    product_data['image_attachment'] = base64.b64encode(f.read()).decode('utf-8')
+                print(f"📎 Using local image file for Shopify upload: {design.local_path}")
+            except Exception as img_err:
+                print(f"⚠️  Could not read local image, falling back to URL: {img_err}")
+                product_data['image_urls'] = [design.image_url] if design.image_url else []
+        else:
+            # Fall back to DALL-E URL (works if called within ~1 hour of generation)
+            product_data['image_urls'] = [design.image_url] if design.image_url else []
+            if not product_data['image_urls']:
+                print("⚠️  No image available for this design — product will have no image")
 
         shopify_product = None
         shopify_id = None
         if config.shopify.is_configured:
             shopify = ShopifyAPI()
             shopify_product = await shopify.create_product(product_data)
-            shopify_id = str(shopify_product['id']) if shopify_product else None
+            if shopify_product:
+                shopify_id = str(shopify_product['id'])
+            else:
+                print(f"❌ Shopify product creation FAILED for design {design.id} ('{title}'). "
+                      f"Check the error above for the full Shopify API response.")
 
         # Save product to local database
         product = Product(
