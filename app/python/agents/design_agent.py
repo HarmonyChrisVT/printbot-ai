@@ -430,6 +430,14 @@ class DesignAgent:
                 print(f"❌ Shopify product creation FAILED for design {design.id} ('{title}'). "
                       f"Check the error above for the full Shopify API response.")
 
+        # Use the permanent Shopify CDN URL for the product image if we got one back.
+        # This URL is what the social agent will use to post — it never expires.
+        if shopify_product and shopify_product.get('images'):
+            product_image_url = shopify_product['images'][0].get('src') or design.image_url
+            print(f"🖼️  Shopify CDN image URL captured for social posting")
+        else:
+            product_image_url = design.image_url
+
         # Save product to local database
         product = Product(
             shopify_id=shopify_id,
@@ -438,7 +446,7 @@ class DesignAgent:
             product_type='T-Shirt',
             tags=design.trend_keywords or [],
             design_id=design.id,
-            design_url=product_image_url,   # permanent CDN URL for social posting
+            design_url=product_image_url,
             selling_price=base_price,
             is_active=True,
             is_approved=True,
