@@ -807,8 +807,15 @@ async def run_diagnostics():
     openai_error = None
     if config.openai.is_configured:
         try:
-            import openai as _openai
-            _client = _openai.AsyncOpenAI(api_key=config.openai.api_key, timeout=10.0)
+            import openai as _openai, httpx as _httpx
+            _client = _openai.AsyncOpenAI(
+                api_key=config.openai.api_key,
+                http_client=_httpx.AsyncClient(
+                    http2=False,
+                    timeout=_httpx.Timeout(30.0, connect=15.0),
+                    transport=_httpx.AsyncHTTPTransport(retries=1),
+                ),
+            )
             await _client.models.list()
             openai_ok = True
         except Exception as _e:
