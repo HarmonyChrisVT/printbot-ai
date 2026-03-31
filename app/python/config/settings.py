@@ -13,17 +13,22 @@ from datetime import timedelta
 class ShopifyConfig:
     """Shopify Custom App Configuration
 
-    Uses a permanent Admin API access token (shpat_...) from a Shopify Custom App.
-    No OAuth flow required — just set SHOPIFY_SHOP_URL and SHOPIFY_ACCESS_TOKEN.
-    See SHOPIFY_SETUP.md for step-by-step instructions.
+    Supports two auth methods:
+    1. Legacy permanent token (shpca_...): set SHOPIFY_SHOP_URL + SHOPIFY_ACCESS_TOKEN
+    2. New Dev Dashboard OAuth (post-Jan 2026): set SHOPIFY_SHOP_URL + SHOPIFY_CLIENT_ID + SHOPIFY_CLIENT_SECRET
+       The client credentials flow exchanges ID+Secret for a short-lived token automatically.
     """
-    shop_url: str = ""      # e.g. your-store.myshopify.com
-    access_token: str = ""  # shpca_... token from Custom App
+    shop_url: str = ""
+    access_token: str = ""       # shpca_... legacy permanent token
+    client_id: str = ""          # Dev Dashboard Client ID
+    client_secret: str = ""      # shpss_... Dev Dashboard Client Secret
     api_version: str = "2025-01"
 
     @property
     def is_configured(self) -> bool:
-        return all([self.shop_url, self.access_token])
+        has_token = bool(self.shop_url and self.access_token)
+        has_oauth = bool(self.shop_url and self.client_id and self.client_secret)
+        return has_token or has_oauth
 
 
 @dataclass
@@ -221,6 +226,8 @@ def load_config_from_env():
         raw_url = raw_url[len("http://"):]
     config.shopify.shop_url = raw_url
     config.shopify.access_token = os.getenv("SHOPIFY_ACCESS_TOKEN", "").strip()
+    config.shopify.client_id = os.getenv("SHOPIFY_CLIENT_ID", "").strip()
+    config.shopify.client_secret = os.getenv("SHOPIFY_CLIENT_SECRET", "").strip()
     
     # Printful
     config.printful.api_key = os.getenv("PRINTFUL_API_KEY", "")

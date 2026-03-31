@@ -133,12 +133,15 @@ class Order(Base):
     tracking_url = Column(String(500))
     tracking_status = Column(String(50), default='pending')
     
+    # Post-fulfillment
+    review_requested = Column(Boolean, default=False)
+
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow)
     processed_at = Column(DateTime)
     shipped_at = Column(DateTime)
     delivered_at = Column(DateTime)
-    
+
     # Relationships
     items = relationship("OrderItem", back_populates="order")
 
@@ -282,6 +285,59 @@ class SystemEvent(Base):
     message = Column(Text)
     details = Column(JSON)
     
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class Affiliate(Base):
+    """Affiliate partners"""
+    __tablename__ = 'affiliates'
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String(255))
+    email = Column(String(255), unique=True)
+    referral_code = Column(String(50), unique=True)
+    commission_rate = Column(Float, default=0.10)
+    payout_method = Column(String(50), default='paypal')
+    payout_details = Column(JSON)
+    total_earned = Column(Float, default=0.0)
+    total_paid = Column(Float, default=0.0)
+    balance = Column(Float, default=0.0)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    referrals = relationship("Referral", back_populates="affiliate")
+
+
+class Referral(Base):
+    """Referral transactions"""
+    __tablename__ = 'referrals'
+
+    id = Column(Integer, primary_key=True)
+    affiliate_id = Column(Integer, ForeignKey('affiliates.id'))
+    referral_code = Column(String(50))
+    order_id = Column(Integer, ForeignKey('orders.id'))
+    order_value = Column(Float)
+    commission = Column(Float)
+    status = Column(String(20), default='pending')  # pending, approved, paid
+    created_at = Column(DateTime, default=datetime.utcnow)
+    approved_at = Column(DateTime)
+
+    affiliate = relationship("Affiliate", back_populates="referrals")
+
+
+class BulkQuote(Base):
+    """B2B bulk order quotes"""
+    __tablename__ = 'bulk_quotes'
+
+    id = Column(Integer, primary_key=True)
+    client_id = Column(Integer)
+    items = Column(Text)  # JSON string
+    quantity = Column(Integer)
+    unit_price = Column(Float)
+    discount_percent = Column(Float, default=0.0)
+    total_price = Column(Float)
+    status = Column(String(20), default='pending')  # pending, accepted, rejected, expired
+    valid_until = Column(DateTime)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 

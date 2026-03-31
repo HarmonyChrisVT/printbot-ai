@@ -13,24 +13,50 @@ from config.settings import config
 
 class ShopifyAPI:
     """Shopify API wrapper"""
-    
+
     def __init__(self):
         self.shop_url = config.shopify.shop_url
         self.access_token = config.shopify.access_token
+        self.client_id = config.shopify.client_id
+        self.client_secret = config.shopify.client_secret
         self.api_version = config.shopify.api_version
         self.base_url = f"https://{self.shop_url}/admin/api/{self.api_version}"
 
-        print(f"🔧 ShopifyAPI init — shop_url={repr(self.shop_url)} | base_url={self.base_url} | token_prefix={self.access_token[:8] if self.access_token else 'EMPTY'}")
+        print(f"🔧 ShopifyAPI init — shop_url={repr(self.shop_url)} | base_url={self.base_url} | token_prefix={self.access_token[:8] if self.access_token else 'EMPTY'} | has_oauth={bool(self.client_id and self.client_secret)}")
 
         self.headers = {
             'X-Shopify-Access-Token': self.access_token,
             'Content-Type': 'application/json'
         }
+
+    async def _fetch_oauth_token(self) -> str:
+        """Exchange Client ID + Secret for an access token via client credentials grant."""
+        url = f"https://{self.shop_url}/admin/oauth/access_token"
+        payload = {
+            "client_id": self.client_id,
+            "client_secret": self.client_secret,
+            "grant_type": "client_credentials",
+        }
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, json=payload, timeout=30) as resp:
+                body = await resp.json()
+                if resp.status == 200 and "access_token" in body:
+                    token = body["access_token"]
+                    print(f"✅ Shopify OAuth token fetched (prefix: {token[:8]})")
+                    return token
+                raise Exception(f"OAuth token exchange failed ({resp.status}): {body}")
+
+    async def _ensure_token(self):
+        """If using client credentials, fetch a token and update headers."""
+        if not self.access_token and self.client_id and self.client_secret:
+            self.access_token = await self._fetch_oauth_token()
+            self.headers['X-Shopify-Access-Token'] = self.access_token
     
     async def _request(self, method: str, endpoint: str, data: Dict = None) -> Optional[Dict]:
         """Make API request"""
+        await self._ensure_token()
         url = f"{self.base_url}{endpoint}"
-        
+
         async with aiohttp.ClientSession(headers=self.headers) as session:
             try:
                 if method == 'GET':

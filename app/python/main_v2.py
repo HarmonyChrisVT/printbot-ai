@@ -117,6 +117,8 @@ class PrintBotOrchestratorV2:
             asyncio.create_task(self.agents['customer_engagement'].run(),  name='customer_engagement'),
             asyncio.create_task(self.agents['competitor_spy'].run(),       name='competitor_spy'),
             asyncio.create_task(self.agents['affiliate'].run(),            name='affiliate'),
+            asyncio.create_task(self.agents['content_writer'].run(),       name='content_writer'),
+            asyncio.create_task(self.agents['customer_service'].run(),     name='customer_service'),
             asyncio.create_task(self.agents['inventory_prediction'].run(), name='inventory_prediction'),
             asyncio.create_task(self._monitoring_loop(),                   name='monitoring'),
             asyncio.create_task(self._profit_analysis_loop(),              name='profit_analysis'),
