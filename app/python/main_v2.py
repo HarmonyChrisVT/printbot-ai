@@ -479,31 +479,76 @@ async def manual_override(request: OverrideRequest):
     }
 
 
+@app.get("/api/analytics")
+async def get_analytics():
+    """Get analytics data from the database."""
+    from database.models import Order, Sale, Design, SocialPost
+    from sqlalchemy import func
+    session = get_session(orchestrator.engine) if orchestrator else None
+    if not session:
+        return {"today": {"orders": 0, "revenue": 0, "profit": 0, "designs": 0, "posts": 0},
+                "week":  {"orders": 0, "revenue": 0, "profit": 0}}
+    try:
+        today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        week_start  = today_start.replace(day=today_start.day - today_start.weekday())
+
+        today_orders  = session.query(func.count(Order.id)).filter(Order.created_at >= today_start).scalar() or 0
+        today_revenue = session.query(func.sum(Order.total_price)).filter(Order.created_at >= today_start).scalar() or 0.0
+        today_profit  = session.query(func.sum(Sale.profit)).filter(Sale.sale_date >= today_start).scalar() or 0.0
+        today_designs = session.query(func.count(Design.id)).filter(Design.created_at >= today_start).scalar() or 0
+        today_posts   = session.query(func.count(SocialPost.id)).filter(SocialPost.posted_at >= today_start).scalar() or 0
+
+        week_orders   = session.query(func.count(Order.id)).filter(Order.created_at >= week_start).scalar() or 0
+        week_revenue  = session.query(func.sum(Order.total_price)).filter(Order.created_at >= week_start).scalar() or 0.0
+        week_profit   = session.query(func.sum(Sale.profit)).filter(Sale.sale_date >= week_start).scalar() or 0.0
+
+        return {
+            "today": {
+                "orders":  today_orders,
+                "revenue": round(today_revenue, 2),
+                "profit":  round(today_profit, 2),
+                "designs": today_designs,
+                "posts":   today_posts,
+            },
+            "week": {
+                "orders":  week_orders,
+                "revenue": round(week_revenue, 2),
+                "profit":  round(week_profit, 2),
+            },
+        }
+    finally:
+        session.close()
+
+
 @app.get("/api/analytics/profit")
 async def get_profit_analytics():
-    """Get profit analytics"""
-    # Would query database for actual analytics
-    return {
-        "today": {
-            "revenue": 347.95,
-            "costs": 198.50,
-            "profit": 149.45,
-            "margin": 42.9,
-            "orders": 7
-        },
-        "this_week": {
-            "revenue": 2184.50,
-            "costs": 1247.30,
-            "profit": 937.20,
-            "margin": 42.9
-        },
-        "this_month": {
-            "revenue": 8947.25,
-            "costs": 5112.80,
-            "profit": 3834.45,
-            "margin": 42.9
+    """Detailed profit analytics from the database."""
+    from database.models import Order, Sale
+    from sqlalchemy import func
+    session = get_session(orchestrator.engine) if orchestrator else None
+    if not session:
+        return {"today": {}, "this_week": {}, "this_month": {}}
+    try:
+        today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        week_start  = today_start.replace(day=today_start.day - today_start.weekday())
+        month_start = today_start.replace(day=1)
+
+        def _agg(date_filter):
+            revenue = session.query(func.sum(Order.total_price)).filter(date_filter(Order.created_at)).scalar() or 0.0
+            profit  = session.query(func.sum(Sale.profit)).filter(date_filter(Sale.sale_date)).scalar() or 0.0
+            cost    = revenue - profit
+            orders  = session.query(func.count(Order.id)).filter(date_filter(Order.created_at)).scalar() or 0
+            margin  = round((profit / revenue * 100), 1) if revenue else 0.0
+            return {"revenue": round(revenue, 2), "costs": round(cost, 2),
+                    "profit": round(profit, 2), "margin": margin, "orders": orders}
+
+        return {
+            "today":      _agg(lambda col: col >= today_start),
+            "this_week":  _agg(lambda col: col >= week_start),
+            "this_month": _agg(lambda col: col >= month_start),
         }
-    }
+    finally:
+        session.close()
 
 
 @app.get("/api/config/status")
