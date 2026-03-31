@@ -359,6 +359,35 @@ class BulkQuote(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
+class EmailLead(Base):
+    """Email leads captured for nurture sequences"""
+    __tablename__ = 'email_leads'
+
+    id = Column(Integer, primary_key=True)
+    email = Column(String(255), unique=True)
+    source = Column(String(100))
+    capture_trigger = Column(String(100))
+    page_url = Column(String(500))
+    referrer = Column(String(500))
+    user_agent = Column(String(500))
+    engagement_score = Column(Integer, default=0)
+    captured_at = Column(DateTime, default=datetime.utcnow)
+
+
+class AbandonedCart(Base):
+    """Abandoned cart recovery tracking"""
+    __tablename__ = 'abandoned_carts'
+
+    id = Column(Integer, primary_key=True)
+    customer_email = Column(String(255))
+    items = Column(JSON)
+    cart_value = Column(Float)
+    abandoned_at = Column(DateTime, default=datetime.utcnow)
+    emails_sent = Column(Integer, default=0)
+    recovered = Column(Boolean, default=False)
+    recovered_at = Column(DateTime)
+
+
 class AnalyticsDaily(Base):
     """Daily analytics summary"""
     __tablename__ = 'analytics_daily'

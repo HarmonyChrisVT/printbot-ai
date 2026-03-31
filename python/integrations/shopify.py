@@ -54,6 +54,7 @@ class ShopifyAPI:
             "client_id": self.api_key,
             "client_secret": self.api_secret,
             "grant_type": "client_credentials",
+            "scope": "read_products,write_products,read_orders,write_orders,read_fulfillments,write_fulfillments,read_inventory,write_inventory",
         }
         headers = {"Content-Type": "application/json"}
 
