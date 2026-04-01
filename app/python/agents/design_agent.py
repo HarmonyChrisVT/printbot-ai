@@ -8,6 +8,7 @@ Max: 3 designs per day
 import asyncio
 import aiohttp
 import openai
+import random
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional
@@ -21,147 +22,88 @@ from database.models import Design, Product, ProductVariant, TrendData, AgentLog
 
 
 class TrendScanner:
-    """Scans multiple sources for trending topics"""
-    
-    def __init__(self):
-        self.trend_cache = {}
-        self.cache_expiry = timedelta(minutes=30)
-        
+    """Returns a randomized mix of design niches targeting multiple age groups."""
+
+    # Each entry: (niche_key, age_group, category)
+    NICHE_POOL = [
+        # --- Gen Z (16-25) ---
+        ('gen_z_internet_humor',      'gen_z',      'humor'),
+        ('gen_z_gamer_life',          'gen_z',      'gaming'),
+        ('gen_z_anime_fan',           'gen_z',      'pop_culture'),
+        ('gen_z_mental_health_jokes', 'gen_z',      'humor'),
+        ('gen_z_broke_but_cool',      'gen_z',      'humor'),
+        ('gen_z_coffee_addict',       'gen_z',      'lifestyle'),
+        ('gen_z_social_media_irony',  'gen_z',      'humor'),
+        ('gen_z_plant_parent',        'gen_z',      'lifestyle'),
+        ('gen_z_side_hustle',         'gen_z',      'motivation'),
+        ('gen_z_nap_enthusiast',      'gen_z',      'humor'),
+        ('gen_z_cat_obsessed',        'gen_z',      'pets'),
+        ('gen_z_conspiracy_humor',    'gen_z',      'humor'),
+        ('gen_z_adulting_fails',      'gen_z',      'humor'),
+        ('gen_z_fomo_jokes',          'gen_z',      'humor'),
+        ('gen_z_hot_take',            'gen_z',      'humor'),
+
+        # --- Millennials (26-40) ---
+        ('millennial_adulting_hard',  'millennial', 'humor'),
+        ('millennial_wine_oclock',    'millennial', 'lifestyle'),
+        ('millennial_90s_nostalgia',  'millennial', 'nostalgia'),
+        ('millennial_wfh_life',       'millennial', 'humor'),
+        ('millennial_student_debt',   'millennial', 'humor'),
+        ('millennial_avocado_toast',  'millennial', 'humor'),
+        ('millennial_inner_child',    'millennial', 'humor'),
+        ('millennial_nap_goals',      'millennial', 'humor'),
+        ('millennial_true_crime_fan', 'millennial', 'pop_culture'),
+        ('millennial_dog_parent',     'millennial', 'pets'),
+        ('millennial_gym_excuses',    'millennial', 'humor'),
+        ('millennial_cancelled_plans','millennial', 'humor'),
+        ('millennial_overthinking',   'millennial', 'humor'),
+        ('millennial_barely_coping',  'millennial', 'humor'),
+        ('millennial_coffee_survival','millennial', 'lifestyle'),
+
+        # --- Gen X / Boomers (40+) ---
+        ('older_retirement_countdown','older',      'humor'),
+        ('older_not_old_vintage',     'older',      'humor'),
+        ('older_dad_joke_champion',   'older',      'humor'),
+        ('older_grandparent_pride',   'older',      'family'),
+        ('older_tech_confused',       'older',      'humor'),
+        ('older_back_in_my_day',      'older',      'humor'),
+        ('older_fishing_obsessed',    'older',      'hobby'),
+        ('older_golf_addict',         'older',      'hobby'),
+        ('older_wine_connoisseur',    'older',      'lifestyle'),
+        ('older_still_got_it',        'older',      'humor'),
+        ('older_nap_is_self_care',    'older',      'humor'),
+        ('older_gardening_expert',    'older',      'hobby'),
+        ('older_classic_rock_fan',    'older',      'music'),
+        ('older_proud_boomer',        'older',      'humor'),
+        ('older_veteran_pride',       'older',      'patriotic'),
+
+        # --- Cross-demographic evergreen ---
+        ('universal_pet_lover',       'all',        'pets'),
+        ('universal_sarcasm_expert',  'all',        'humor'),
+        ('universal_introvert_life',  'all',        'humor'),
+        ('universal_pizza_religion',  'all',        'food'),
+        ('universal_monday_hate',     'all',        'humor'),
+        ('universal_travel_addict',   'all',        'lifestyle'),
+        ('universal_bookworm',        'all',        'hobby'),
+        ('universal_night_owl',       'all',        'humor'),
+        ('universal_sports_fan',      'all',        'sports'),
+        ('universal_music_lover',     'all',        'music'),
+    ]
+
     async def scan_all_sources(self) -> List[Dict]:
-        """Scan all configured trend sources"""
+        """Return a randomized selection of niches for variety."""
+        shuffled = self.NICHE_POOL.copy()
+        random.shuffle(shuffled)
         trends = []
-        
-        # Google Trends
-        google_trends = await self._scan_google_trends()
-        trends.extend(google_trends)
-        
-        # Pinterest Trends (if accessible)
-        pinterest_trends = await self._scan_pinterest()
-        trends.extend(pinterest_trends)
-        
-        # Etsy trending
-        etsy_trends = await self._scan_etsy()
-        trends.extend(etsy_trends)
-        
-        # Social media hashtags
-        social_trends = await self._scan_social_hashtags()
-        trends.extend(social_trends)
-        
-        # Filter and rank trends
-        ranked_trends = self._rank_trends(trends)
-        
-        return ranked_trends[:20]  # Return top 20
-    
-    async def _scan_google_trends(self) -> List[Dict]:
-        """Scrape Google Trends daily search"""
-        trends = []
-        try:
-            url = "https://trends.google.com/trends/trendingsearches/daily/rss"
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url, timeout=10) as response:
-                    if response.status == 200:
-                        content = await response.text()
-                        soup = BeautifulSoup(content, 'xml')
-                        items = soup.find_all('item')[:10]
-                        
-                        for item in items:
-                            title = item.find('title')
-                            if title:
-                                trends.append({
-                                    'keyword': title.text,
-                                    'source': 'google_trends',
-                                    'category': 'general',
-                                    'trend_score': 100 - len(trends) * 5,  # Decreasing score
-                                    'search_volume': None
-                                })
-        except Exception as e:
-            print(f"Error scanning Google Trends: {e}")
-        
-        return trends
-    
-    async def _scan_pinterest(self) -> List[Dict]:
-        """Scan Pinterest for trending ideas"""
-        trends = []
-        try:
-            # Pinterest doesn't have a public API for trends without auth
-            # We'll use popular categories as proxy
-            categories = [
-                'funny quotes', 'motivational quotes', 'vintage aesthetic',
-                'minimalist design', 'pop culture', 'gaming', 'pets',
-                'travel', 'fitness', 'foodie', 'music', 'movies'
-            ]
-            
-            for cat in categories:
-                trends.append({
-                    'keyword': cat,
-                    'source': 'pinterest',
-                    'category': 'design',
-                    'trend_score': 70,
-                    'search_volume': None
-                })
-        except Exception as e:
-            print(f"Error scanning Pinterest: {e}")
-        
-        return trends
-    
-    async def _scan_etsy(self) -> List[Dict]:
-        """Scan Etsy for trending products"""
-        trends = []
-        try:
-            search_terms = [
-                'trending tshirt', 'popular mug', 'funny gift',
-                'personalized gift', 'custom design', 'viral quote'
-            ]
-            
-            for term in search_terms:
-                trends.append({
-                    'keyword': term,
-                    'source': 'etsy',
-                    'category': 'product',
-                    'trend_score': 65,
-                    'search_volume': None
-                })
-        except Exception as e:
-            print(f"Error scanning Etsy: {e}")
-        
-        return trends
-    
-    async def _scan_social_hashtags(self) -> List[Dict]:
-        """Scan social media for trending hashtags"""
-        # Popular evergreen hashtags that perform well
-        evergreen_hashtags = [
-            '#MondayMotivation', '#TBT', '#FridayFeeling', '#WeekendVibes',
-            '#SelfCare', '#Hustle', '#Goals', '#Blessed', '#Grateful',
-            '#OOTD', '#Foodie', '#Travel', '#Fitness', '#Gaming'
-        ]
-        
-        trends = []
-        for tag in evergreen_hashtags:
+        for niche_key, age_group, category in shuffled[:20]:
             trends.append({
-                'keyword': tag.replace('#', ''),
-                'source': 'social_media',
-                'category': 'hashtag',
-                'trend_score': 60,
-                'search_volume': None
+                'keyword': niche_key,
+                'age_group': age_group,
+                'category': category,
+                'source': 'curated_pool',
+                'trend_score': random.randint(70, 100),
             })
-        
         return trends
-    
-    def _rank_trends(self, trends: List[Dict]) -> List[Dict]:
-        """Rank trends by score and remove duplicates"""
-        # Remove duplicates
-        seen = set()
-        unique_trends = []
-        for t in trends:
-            keyword = t['keyword'].lower().strip()
-            if keyword not in seen:
-                seen.add(keyword)
-                unique_trends.append(t)
-        
-        # Sort by trend score
-        unique_trends.sort(key=lambda x: x.get('trend_score', 0), reverse=True)
-        
-        return unique_trends
 
 
 class DesignGenerator:
@@ -179,8 +121,9 @@ class DesignGenerator:
     async def generate_design(self, trend: Dict) -> Optional[Design]:
         """Generate a design based on trend data"""
         try:
-            # Create optimized prompt
-            prompt = self._create_prompt(trend)
+            # Use GPT-4 to create a specific funny concept, then build the image prompt
+            concept = await self._generate_concept(trend)
+            prompt = concept['image_prompt']
             
             # Try DALL-E first, fall back to Pollinations.AI if billing limit hit
             image_url = None
@@ -211,18 +154,23 @@ class DesignGenerator:
             # Download and save image
             local_path = await self._download_image(image_url, trend['keyword'])
 
-            # Create design record
+            # Create design record — store concept metadata for use in product title/description
             design = Design(
                 prompt=prompt,
                 image_url=image_url,
                 local_path=str(local_path) if local_path else None,
                 trend_source=trend['source'],
-                trend_keywords=[trend['keyword']],
+                trend_keywords=[trend['keyword'], concept['title'], concept['slogan']],
                 trend_score=trend.get('trend_score', 50),
                 ai_model=ai_model_used,
                 generation_params={
                     'size': config.design.image_size,
-                    'quality': config.design.image_quality
+                    'quality': config.design.image_quality,
+                    'title': concept['title'],
+                    'slogan': concept['slogan'],
+                    'description': concept['description'],
+                    'age_group': trend.get('age_group', 'all'),
+                    'tags': concept['tags'],
                 },
                 status='pending',
                 ai_confidence=0.85 if ai_model_used != 'pollinations' else 0.75
@@ -263,34 +211,69 @@ class DesignGenerator:
             print(f"❌ Pollinations.AI exception: {e}")
             return None
     
-    def _create_prompt(self, trend: Dict) -> str:
-        """Create an optimized DALL-E prompt from trend"""
-        keyword = trend['keyword']
-        
-        # Prompt templates for different categories
-        templates = {
-            'quote': f"A minimalist t-shirt design with the text '{keyword}' in modern typography, clean white background, professional product photography style, high contrast",
-            'funny': f"A humorous graphic t-shirt design featuring '{keyword}', cartoon style, vibrant colors, white background, print-ready",
-            'aesthetic': f"Aesthetic vintage-style design with '{keyword}', muted colors, distressed texture, white background, trendy illustration",
-            'motivational': f"Inspirational typography design with '{keyword}', bold modern font, gradient accents, white background, professional",
-            'pop_culture': f"Pop culture inspired design featuring '{keyword}', trendy style, eye-catching colors, white background, viral potential",
-            'default': f"Modern t-shirt graphic design with '{keyword}', clean professional style, white background, print-ready, high quality"
-        }
-        
-        # Determine best template based on keyword
-        keyword_lower = keyword.lower()
-        if any(word in keyword_lower for word in ['quote', 'saying', 'words']):
-            return templates['quote']
-        elif any(word in keyword_lower for word in ['funny', 'hilarious', 'joke', 'meme']):
-            return templates['funny']
-        elif any(word in keyword_lower for word in ['aesthetic', 'vintage', 'retro']):
-            return templates['aesthetic']
-        elif any(word in keyword_lower for word in ['motivation', 'inspire', 'hustle', 'goals']):
-            return templates['motivational']
-        elif any(word in keyword_lower for word in ['viral', 'trending', 'pop']):
-            return templates['pop_culture']
-        else:
-            return templates['default']
+    async def _generate_concept(self, trend: Dict) -> Dict:
+        """Use GPT-4 to generate a specific, funny, print-ready t-shirt concept."""
+        niche = trend['keyword']
+        age_group = trend.get('age_group', 'all')
+        category = trend.get('category', 'humor')
+
+        age_desc = {
+            'gen_z': 'Gen Z (ages 16-25) — use internet slang, meme culture, dry humor, self-aware irony',
+            'millennial': 'Millennials (ages 26-40) — use relatable adulting humor, nostalgia, work-life balance jokes',
+            'older': 'Gen X and Boomers (ages 40+) — use dad jokes, retirement humor, "back in my day" references, wholesome wit',
+            'all': 'all age groups — use universally relatable humor that anyone can appreciate',
+        }.get(age_group, 'all age groups')
+
+        system_prompt = (
+            "You are a viral t-shirt designer who creates funny, clever, print-ready apparel concepts. "
+            "Your designs sell thousands of units because they are specific, witty, and immediately relatable. "
+            "Never be generic. Every design should feel like it was made for a specific person who will laugh and say 'that's SO me'."
+        )
+
+        user_prompt = f"""Create a specific funny t-shirt design concept for the niche: "{niche}"
+Target audience: {age_desc}
+
+Return ONLY valid JSON with these exact fields:
+{{
+  "title": "Short punchy product title (5 words max, no 'Print on Demand')",
+  "slogan": "The actual funny text that goes ON the shirt (must be funny, specific, and print-ready — 1-2 lines max)",
+  "description": "2-sentence product description for the Shopify listing that sells the shirt",
+  "tags": ["tag1", "tag2", "tag3", "tag4", "tag5"],
+  "image_prompt": "Detailed DALL-E prompt: flat vector t-shirt graphic, white background, the slogan text prominently displayed in bold readable font, [describe any supporting illustration], print-ready, high contrast, no gradients, clean edges"
+}}
+
+Rules:
+- The slogan must be FUNNY and SPECIFIC — not generic like "I love coffee"
+- Use correct spelling and grammar
+- The image_prompt must include the exact slogan text so DALL-E renders it on the design
+- Tags should be relevant search terms people actually use"""
+
+        try:
+            response = await self.client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                temperature=0.9,
+                max_tokens=500,
+            )
+            raw = response.choices[0].message.content.strip()
+            # Strip markdown code fences if present
+            raw = re.sub(r'^```(?:json)?\s*', '', raw)
+            raw = re.sub(r'\s*```$', '', raw)
+            concept = json.loads(raw)
+            print(f"💡 Concept: '{concept['slogan']}' → {concept['title']}")
+            return concept
+        except Exception as e:
+            print(f"⚠️  GPT-4 concept generation failed: {e} — using fallback")
+            return {
+                'title': niche.replace('_', ' ').title(),
+                'slogan': niche.replace('_', ' ').title(),
+                'description': f"Funny t-shirt for {age_group}. High-quality print-on-demand.",
+                'tags': [niche, age_group, category, 'funny', 'tshirt'],
+                'image_prompt': f"Flat vector t-shirt graphic, bold text '{niche.replace('_', ' ').title()}', white background, print-ready, high contrast",
+            }
     
     async def _download_image(self, url: str, keyword: str) -> Optional[Path]:
         """Download generated image to local storage"""
@@ -400,19 +383,17 @@ class DesignAgent:
         return count
     
     def _filter_unused_trends(self, trends: List[Dict]) -> List[Dict]:
-        """Filter out trends we've already created designs for"""
-        unused = []
-        for trend in trends:
-            keyword = trend['keyword'].lower()
-            existing = self.session.query(TrendData).filter(
-                TrendData.keyword.ilike(f"%{keyword}%"),
-                TrendData.design_created == True
-            ).first()
-            
-            if not existing:
-                unused.append(trend)
-        
-        return unused
+        """Filter out niches used in the last 30 designs to ensure variety."""
+        recent = self.session.query(Design).order_by(
+            Design.created_at.desc()
+        ).limit(30).all()
+        recently_used = set()
+        for d in recent:
+            if d.trend_keywords:
+                recently_used.add(d.trend_keywords[0].lower())
+
+        unused = [t for t in trends if t['keyword'].lower() not in recently_used]
+        return unused if unused else trends  # fallback: allow repeats if pool exhausted
     
     async def _approve_design(self, design: Design):
         """Approve a design and create product"""
@@ -430,16 +411,22 @@ class DesignAgent:
         import base64
         from integrations.shopify import ShopifyAPI
 
-        keyword = (design.trend_keywords[0] if design.trend_keywords else 'New Design')
-        title = f"{keyword.title()} - Print on Demand"
-        description = f"<p>Trending design featuring {keyword}. High-quality print-on-demand product available in multiple sizes.</p>"
+        params = design.generation_params or {}
+        title = params.get('title') or (design.trend_keywords[0] if design.trend_keywords else 'New Design')
+        slogan = params.get('slogan', '')
+        description_text = params.get('description', f'Funny t-shirt: {slogan}' if slogan else f'Unique graphic tee — {title}')
+        tags = params.get('tags') or design.trend_keywords or []
+        description = f"<p>{description_text}</p>"
+        if slogan:
+            description += f'<p><strong>"{slogan}"</strong></p>'
+        description += "<p>Available in sizes S–2XL. High-quality print-on-demand.</p>"
         base_price = 24.99
 
         product_data = {
             'title': title,
             'description': description,
             'product_type': 'T-Shirt',
-            'tags': design.trend_keywords or [],
+            'tags': tags,
             'variants': [
                 {'size': 'S',  'price': base_price,      'sku': f'SKU-{design.id}-S'},
                 {'size': 'M',  'price': base_price,      'sku': f'SKU-{design.id}-M'},
