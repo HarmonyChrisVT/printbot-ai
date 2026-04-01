@@ -313,7 +313,7 @@ class FulfillmentAgent:
                     discount_price=float(shopify_order.get('total_discounts', 0)),
                     financial_status=shopify_order.get('financial_status'),
                     fulfillment_status=shopify_order.get('fulfillment_status') or 'unfulfilled',
-                    created_at=datetime.fromisoformat(shopify_order.get('created_at').replace('Z', '+00:00')),
+                    created_at=datetime.fromisoformat(shopify_order['created_at'].replace('Z', '+00:00')) if shopify_order.get('created_at') else datetime.utcnow(),
                     processed_at=datetime.utcnow()
                 )
                 

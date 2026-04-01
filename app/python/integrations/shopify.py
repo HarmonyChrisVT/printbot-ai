@@ -239,9 +239,9 @@ class ShopifyAPI:
         """Update product price"""
         # First get the product to find variant ID
         product = await self.get_product(product_id)
-        if not product or not product.get('variants'):
+        if not product or not product.get('variants') or len(product['variants']) == 0:
             return False
-        
+
         variant_id = product['variants'][0]['id']
         
         # Update variant price

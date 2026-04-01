@@ -182,20 +182,35 @@ class DesignGenerator:
             # Create optimized prompt
             prompt = self._create_prompt(trend)
             
-            # Generate image with DALL-E
-            response = await self.client.images.generate(
-                model=config.openai.image_model,
-                prompt=prompt,
-                size=config.design.image_size,
-                quality=config.design.image_quality,
-                n=1
-            )
-            
-            image_url = response.data[0].url
-            
+            # Try DALL-E first, fall back to Pollinations.AI if billing limit hit
+            image_url = None
+            ai_model_used = config.openai.image_model
+            try:
+                response = await self.client.images.generate(
+                    model=config.openai.image_model,
+                    prompt=prompt,
+                    size=config.design.image_size,
+                    quality=config.design.image_quality,
+                    n=1
+                )
+                image_url = response.data[0].url
+                print(f"🎨 DALL-E image generated")
+            except Exception as dalle_err:
+                err_str = str(dalle_err)
+                if 'billing_hard_limit_reached' in err_str or 'insufficient_quota' in err_str or 'billing' in err_str.lower():
+                    print(f"⚠️  OpenAI billing limit hit — falling back to Pollinations.AI (free)")
+                    image_url = await self._generate_pollinations(prompt, trend['keyword'])
+                    ai_model_used = 'pollinations'
+                else:
+                    raise
+
+            if not image_url:
+                print(f"❌ Both DALL-E and Pollinations.AI failed for trend: {trend['keyword']}")
+                return None
+
             # Download and save image
             local_path = await self._download_image(image_url, trend['keyword'])
-            
+
             # Create design record
             design = Design(
                 prompt=prompt,
@@ -204,21 +219,48 @@ class DesignGenerator:
                 trend_source=trend['source'],
                 trend_keywords=[trend['keyword']],
                 trend_score=trend.get('trend_score', 50),
-                ai_model=config.openai.image_model,
+                ai_model=ai_model_used,
                 generation_params={
                     'size': config.design.image_size,
                     'quality': config.design.image_quality
                 },
                 status='pending',
-                ai_confidence=0.85  # DALL-E quality estimate
+                ai_confidence=0.85 if ai_model_used != 'pollinations' else 0.75
             )
-            
+
             return design
-            
+
         except Exception as e:
             import traceback
             print(f"❌ Error generating design: {e}")
             print(traceback.format_exc())
+            return None
+
+    async def _generate_pollinations(self, prompt: str, keyword: str) -> Optional[str]:
+        """Generate image via Pollinations.AI (free, no API key needed)"""
+        try:
+            import urllib.parse
+            encoded_prompt = urllib.parse.quote(prompt)
+            url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1024&height=1024&nologo=true&model=flux"
+            print(f"🌸 Pollinations.AI request: {url[:80]}...")
+
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, timeout=120) as response:
+                    if response.status == 200:
+                        # Pollinations returns the image directly — save it and return a local file:// URL
+                        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                        safe_keyword = re.sub(r'[^\w]', '_', keyword)[:30]
+                        filepath = self.output_dir / f"{safe_keyword}_{timestamp}_pollinations.png"
+                        content = await response.read()
+                        with open(filepath, 'wb') as f:
+                            f.write(content)
+                        print(f"✅ Pollinations.AI image saved: {filepath}")
+                        return str(filepath)  # use local path as the "url"
+                    else:
+                        print(f"❌ Pollinations.AI error: {response.status}")
+                        return None
+        except Exception as e:
+            print(f"❌ Pollinations.AI exception: {e}")
             return None
     
     def _create_prompt(self, trend: Dict) -> str:
@@ -443,6 +485,7 @@ class DesignAgent:
             product_image_url = design.image_url
 
         # Save product to local database
+        cost_price = 12.00  # Printful base cost for a standard t-shirt
         product = Product(
             shopify_id=shopify_id,
             title=title,
@@ -452,6 +495,7 @@ class DesignAgent:
             design_id=design.id,
             design_url=product_image_url,
             selling_price=base_price,
+            cost_price=cost_price,
             is_active=True,
             is_approved=True,
         )
