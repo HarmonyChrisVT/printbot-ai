@@ -205,6 +205,7 @@ class ShopifyAPI:
                 'product_type': product_data.get('product_type'),
                 'tags': tags_str,
                 'status': 'active',
+                'published_scope': 'web',
                 'variants': [
                     {
                         'option1': variant.get('size', 'Default'),
