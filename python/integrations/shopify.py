@@ -204,6 +204,7 @@ class ShopifyAPI:
                 'vendor': product_data.get('vendor', 'PrintBot AI'),
                 'product_type': product_data.get('product_type'),
                 'tags': tags_str,
+                'status': 'active',
                 'variants': [
                     {
                         'option1': variant.get('size', 'Default'),
