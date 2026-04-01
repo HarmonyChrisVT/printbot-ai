@@ -7,7 +7,7 @@ import asyncio
 import signal
 import sys
 import traceback
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, List
 import json
@@ -656,7 +656,7 @@ async def get_analytics():
                 "week":  {"orders": 0, "revenue": 0, "profit": 0}}
     try:
         today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
-        week_start  = today_start.replace(day=today_start.day - today_start.weekday())
+        week_start  = today_start - timedelta(days=today_start.weekday())
 
         today_orders  = session.query(func.count(Order.id)).filter(Order.created_at >= today_start).scalar() or 0
         today_revenue = session.query(func.sum(Order.total_price)).filter(Order.created_at >= today_start).scalar() or 0.0
@@ -696,7 +696,7 @@ async def get_profit_analytics():
         return {"today": {}, "this_week": {}, "this_month": {}}
     try:
         today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
-        week_start  = today_start.replace(day=today_start.day - today_start.weekday())
+        week_start  = today_start - timedelta(days=today_start.weekday())
         month_start = today_start.replace(day=1)
 
         def _agg(date_filter):
