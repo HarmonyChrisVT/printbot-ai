@@ -213,7 +213,7 @@ class PricingAgent:
     async def run(self):
         """Main agent loop"""
         self.running = True
-        print("💰 Pricing Agent started")
+        print("💰 Gordon Gecko is online — greed is good, prices are better")
         
         while self.running:
             try:
@@ -359,7 +359,7 @@ class PricingAgent:
     def stop(self):
         """Stop the agent"""
         self.running = False
-        print("🛑 Pricing Agent stopped")
+        print("🛑 Gordon Gecko has left the building")
 
 
 # Standalone run function

@@ -42,7 +42,7 @@ class HealthMonitorAgent:
     async def run(self):
         self.running = True
         logger.info("HealthMonitorAgent started")
-        print("🏥 Health Monitor Agent started")
+        print("🏥 Dr. House is on duty — it's never lupus, but it might be a bug")
 
         while self.running:
             try:
@@ -57,7 +57,7 @@ class HealthMonitorAgent:
 
     def stop(self):
         self.running = False
-        print("🛑 Health Monitor Agent stopped")
+        print("🛑 Dr. House has discharged himself")
 
     # ── Error scan ─────────────────────────────────────────────────────────────
 
@@ -156,7 +156,7 @@ class HealthMonitorAgent:
         bus.publish("health_monitor", "healthy_agents", healthy_agents)
 
         if total_errors == 0:
-            print(f"✅ Health Monitor: All clear — no errors in last 5 min")
+            print(f"✅ Dr. House: All clear — no errors in last 5 min (surprisingly)")
         else:
             print(
                 f"⚠️  Health Monitor: {total_errors} error(s) across "

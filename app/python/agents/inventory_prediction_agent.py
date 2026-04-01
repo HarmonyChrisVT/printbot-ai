@@ -15,6 +15,9 @@ import json
 from config.settings import config
 from database.models import Product, Sale, Design, AgentLog, get_session
 
+# Products with zero sales older than this many days get auto-archived
+SLOW_SELLER_DAYS = 14
+
 
 @dataclass
 class ProductPrediction:
@@ -138,15 +141,16 @@ class InventoryPredictionAgent:
     async def run(self):
         """Main agent loop"""
         self.running = True
-        print("📊 Inventory Prediction Agent started")
+        print("🔮 Nostradamus is gazing into the crystal ball — the sales data never lies")
         
         while self.running:
             try:
                 await self._analyze_inventory()
-                await asyncio.sleep(24 * 3600)  # Daily
-                
+                await self._archive_slow_sellers()
+                await asyncio.sleep(6 * 3600)  # Every 6 hours
+
             except Exception as e:
-                self._log_error(f"Prediction agent error: {e}")
+                self._log_error(f"Nostradamus prediction error: {e}")
                 await asyncio.sleep(3600)
     
     async def _analyze_inventory(self):
@@ -269,6 +273,45 @@ class InventoryPredictionAgent:
                 
                 print(f"   • {product.title}: ${product.selling_price} → ${new_price:.2f} (20% off)")
     
+    async def _archive_slow_sellers(self):
+        """Archive products with zero sales that are older than SLOW_SELLER_DAYS."""
+        cutoff = datetime.utcnow() - timedelta(days=SLOW_SELLER_DAYS)
+        stale_products = self.session.query(Product).filter(
+            Product.is_active == True,
+            Product.created_at <= cutoff,
+        ).all()
+
+        archived = []
+        for product in stale_products:
+            has_sales = self.session.query(Sale).filter(Sale.product_id == product.id).first()
+            if has_sales:
+                continue
+
+            # Archive in Shopify
+            if product.shopify_id:
+                try:
+                    import aiohttp
+                    from integrations.shopify import ShopifyAPI
+                    api = ShopifyAPI()
+                    await api.update_product(product.shopify_id, {'status': 'archived'})
+                except Exception as e:
+                    print(f"⚠️  Nostradamus: could not archive Shopify product {product.shopify_id}: {e}")
+
+            product.is_active = False
+            archived.append(product.title)
+
+        if archived:
+            self.session.commit()
+            print(f"🗑️  Nostradamus archived {len(archived)} slow sellers (0 sales in {SLOW_SELLER_DAYS}d):")
+            for title in archived:
+                print(f"   ✂️  {title}")
+            self._log_action("slow_seller_cleanup", "success", {
+                "archived_count": len(archived),
+                "titles": archived,
+            })
+        else:
+            print(f"📦 Nostradamus: no slow sellers to archive today")
+
     def get_prediction_summary(self) -> Dict:
         """Get summary of all predictions"""
         products = self.session.query(Product).filter(Product.is_active == True).all()
@@ -302,7 +345,7 @@ class InventoryPredictionAgent:
     def stop(self):
         """Stop the agent"""
         self.running = False
-        print("🛑 Inventory Prediction Agent stopped")
+        print("🛑 Nostradamus closed the crystal ball")
 
 
 # Standalone run

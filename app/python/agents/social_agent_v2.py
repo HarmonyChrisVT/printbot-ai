@@ -29,7 +29,7 @@ TIKTOK_API_BASE      = "https://open.tiktokapis.com/v2"
 
 # Fixed active-hour windows (UTC). Posts will only be created within these windows
 # to mimic real human behaviour. Agent still wakes up every 6 h to check.
-ACTIVE_HOURS_UTC = {8, 12, 14, 17, 19, 21}  # 8 am, noon, 2 pm, 5 pm, 7 pm, 9 pm
+ACTIVE_HOURS_UTC = {7, 8, 9, 11, 12, 13, 14, 15, 17, 18, 19, 20, 21, 22}  # Extended windows
 
 
 # ── Human-like delays ────────────────────────────────────────────────────────
@@ -247,7 +247,7 @@ class SocialAgentV2:
 
     async def run(self):
         self.running = True
-        print("📱 Social Agent V2 started")
+        print("📱 The Influencer has entered the chat — posting for clout and cash")
         print(f"   Instagram configured: {config.social.instagram_configured}")
         print(f"   TikTok configured:    {config.social.tiktok_configured}")
 
@@ -273,16 +273,16 @@ class SocialAgentV2:
                     print(f"⏳ Social Agent: outside active hours (current={current_h}h UTC), "
                           f"next window at {next_h}h UTC")
 
-                await asyncio.sleep(6 * 3600)
+                await asyncio.sleep(3600)  # Check every hour
 
             except Exception as e:
                 self._log_action("run_error", "error", {"message": str(e), "trace": traceback.format_exc()})
                 await asyncio.sleep(600)
 
     async def _process_cycle(self):
-        print("📱 Social Agent: running posting cycle…")
+        print("📱 The Influencer: running posting cycle…")
         await self._create_posts()
-        print("📱 Social Agent: cycle complete")
+        print("📱 The Influencer: posting cycle complete — awaiting likes")
 
     async def _create_posts(self):
         """Post each un-posted approved product to Instagram and TikTok."""
@@ -416,7 +416,7 @@ class SocialAgentV2:
 
     def stop(self):
         self.running = False
-        print("🛑 Social Agent V2 stopped")
+        print("🛑 The Influencer has logged off")
 
 
 # Standalone run

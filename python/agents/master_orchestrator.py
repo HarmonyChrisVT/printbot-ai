@@ -43,23 +43,21 @@ class MasterOrchestrator:
     as a plain dict from the main orchestrator.
     """
 
-    EVAL_INTERVAL = 300  # seconds between evaluations
+    EVAL_INTERVAL = 120  # seconds between evaluations (was 300)
 
-    # Expected maximum idle time per agent before it's considered stuck (seconds).
-    # If an agent has no log entry newer than this, the orchestrator will reassign
-    # it a high-priority task from the current mode's queue.
+    # Maximum idle time before an agent gets reassigned (seconds).
     AGENT_IDLE_TIMEOUT: Dict[str, int] = {
-        "design":               1800 * 2,   # 30-min interval × 2
-        "pricing":              7200 * 2,   # 2-hr interval × 2
-        "social":               21600 * 2,  # 6-hr interval × 2
-        "fulfillment":          300 * 3,    # 5-min interval × 3
-        "b2b":                  3600 * 2,
-        "customer_engagement":  3600 * 2,
-        "competitor_spy":       7200 * 2,
-        "affiliate":            86400 * 2,
-        "content_writer":       1800 * 2,
-        "customer_service":     60 * 3,
-        "inventory_prediction": 86400 * 2,
+        "design":               600 * 3,    # 10-min interval × 3
+        "pricing":              3600 * 2,   # 1-hr interval × 2
+        "social":               3600 * 2,   # 1-hr interval × 2
+        "fulfillment":          300 * 2,    # 5-min interval × 2
+        "b2b":                  3600,
+        "customer_engagement":  1800,
+        "competitor_spy":       3600 * 2,
+        "affiliate":            3600 * 6,
+        "content_writer":       120 * 3,    # 2-min interval × 3
+        "customer_service":     60 * 2,
+        "inventory_prediction": 3600 * 7,   # 6-hr interval + 1hr buffer
     }
 
     # ── Priority queues per mode (front = highest priority) ───────────────────
@@ -183,7 +181,7 @@ class MasterOrchestrator:
 
     async def run(self):
         self.running = True
-        logger.info("MasterOrchestrator started — monitoring all agents every 5 min")
+        logger.info("👑 The Godfather is watching — nobody idles on his watch")
         await self._evaluate()          # immediate first evaluation
         while self.running:
             try:

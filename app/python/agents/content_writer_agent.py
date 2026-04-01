@@ -111,6 +111,7 @@ class ContentWriterAgent:
         self.session = db_session
         self.client = openai.OpenAI(api_key=config.openai.api_key)
         self.seo = SEOOptimizer()
+        self.running = False
     
     async def generate_product_content(
         self,
@@ -264,6 +265,48 @@ Format as JSON:
         """Analyze A/B test results and pick winners"""
         # Would analyze conversion rates and automatically switch to winning version
         pass
+
+    async def run(self):
+        """Main agent loop — watches for approved products without content and writes it"""
+        self.running = True
+        print("✍️  Shakespeare is sharpening his quill — words that SELL incoming")
+        while self.running:
+            try:
+                await self._process_cycle()
+                await asyncio.sleep(120)  # Check every 2 minutes
+            except Exception as e:
+                print(f"❌ Shakespeare dropped his quill: {e}")
+                await asyncio.sleep(60)
+
+    async def _process_cycle(self):
+        """Write content for any approved products that are missing titles/descriptions"""
+        from database.models import Product, AgentLog
+        products = self.session.query(Product).filter(
+            Product.is_approved == True,
+            Product.description == None
+        ).limit(15).all()
+
+        for product in products:
+            try:
+                design_prompt = product.title or "trending graphic design"
+                versions = await self.generate_product_content(
+                    design_prompt=design_prompt,
+                    product_type=product.product_type or "t-shirt",
+                    generate_variants=1,
+                )
+                if versions:
+                    await self.update_product_content(product.id, versions[0])
+                    log = AgentLog(agent_name='content_writer', action='content_written',
+                                   status='success', details={'product_id': product.id})
+                    self.session.add(log)
+                    self.session.commit()
+            except Exception as e:
+                print(f"❌ Content writing failed for product {product.id}: {e}")
+
+    def stop(self):
+        """Stop the agent"""
+        self.running = False
+        print("🛑 Shakespeare has exited stage left")
 
 
 # Standalone run

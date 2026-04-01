@@ -269,13 +269,13 @@ Format as JSON:
     async def run(self):
         """Main agent loop — watches for approved products without content and writes it"""
         self.running = True
-        print("✍️  Content Writer Agent started")
+        print("✍️  Shakespeare is sharpening his quill — words that SELL incoming")
         while self.running:
             try:
                 await self._process_cycle()
-                await asyncio.sleep(300)  # Check every 5 minutes
+                await asyncio.sleep(120)  # Check every 2 minutes
             except Exception as e:
-                print(f"❌ Content Writer Agent error: {e}")
+                print(f"❌ Shakespeare dropped his quill: {e}")
                 await asyncio.sleep(60)
 
     async def _process_cycle(self):
@@ -284,7 +284,7 @@ Format as JSON:
         products = self.session.query(Product).filter(
             Product.is_approved == True,
             Product.description == None
-        ).limit(5).all()
+        ).limit(15).all()
 
         for product in products:
             try:
@@ -306,7 +306,7 @@ Format as JSON:
     def stop(self):
         """Stop the agent"""
         self.running = False
-        print("🛑 Content Writer Agent stopped")
+        print("🛑 Shakespeare has exited stage left")
 
 
 # Standalone run

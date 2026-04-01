@@ -312,7 +312,7 @@ class DesignAgent:
     async def run(self):
         """Main agent loop"""
         self.running = True
-        print("🎨 Design Agent started")
+        print("🎨 Picasso is awake and ready to create masterpieces")
         
         while self.running:
             try:
@@ -532,7 +532,7 @@ class DesignAgent:
     def stop(self):
         """Stop the agent"""
         self.running = False
-        print("🛑 Design Agent stopped")
+        print("🛑 Picasso put down the brush")
 
 
 # Standalone run function

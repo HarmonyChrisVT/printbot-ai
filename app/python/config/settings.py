@@ -149,8 +149,8 @@ class DesignConfig:
     ])
     
     # Design generation settings
-    max_daily_designs: int = 3
-    design_interval: int = 1800  # 30 minutes in seconds
+    max_daily_designs: int = 10
+    design_interval: int = 600  # 10 minutes in seconds
     
     # Image generation
     image_size: str = "1024x1024"
